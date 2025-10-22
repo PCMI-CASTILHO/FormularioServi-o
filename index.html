@@ -1320,7 +1320,7 @@ async function carregarFormularioLocal(id) {
         // ASSUME-SE que 'canvasCliente/ctxCliente/etc.' estão definidos globalmente
         state.assinaturas = registro.assinaturas || { cliente: null, tecnico: null };
         if (state.assinaturas.cliente) {
-            OnCanvas(state.assinaturas.cliente, canvasCliente, ctxCliente);
+            drawDataUrlOnCanvas(state.assinaturas.cliente, canvasCliente, ctxCliente);
         } else {
             ctxCliente.clearRect(0, 0, canvasCliente.width, canvasCliente.height);
         }
