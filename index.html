@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Serviço Selaves">
+    <title>Formulário de Serviço - Selaves</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+	<link rel="manifest" href="./manifest.json">
+	<meta name="theme-color" content="#1f2937">
+	<script>
+	if ("serviceWorker" in navigator) {
+		navigator.serviceWorker.register("./sw.js");
+	}
+	</script>
+
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --secondary: #1e40af;
+            --accent: #f59e0b;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        
+        .signature-canvas {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background-color: white;
+            cursor: crosshair;
+            touch-action: none;
+        }
+        
+        .photo-preview {
+            border-radius: 8px;
+            object-fit: cover;
+            height: 120px;
+            width: 120px;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--secondary);
+        }
+        
+        .btn-secondary {
+            background-color: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #e2e8f0;
+        }
+        
+        .form-section {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-section h2 {
+            color: #1e293b;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-online {
+            background-color: #10b981;
+        }
+        
+        .status-offline {
+            background-color: #ef4444;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+        }
+        
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+        }
+
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 16px;
+            border-radius: 8px;
+            color: white;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .notification.success {
+            background-color: #10b981;
+        }
+        
+        .notification.error {
+            background-color: #ef4444;
+        }
+        
+        .notification.info {
+            background-color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-50">
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center">
+                <div class="bg-blue-600 text-white p-2 rounded-lg mr-3">
+                    <i class="fas fa-tools text-xl"></i>
+                </div>
+                <h1 class="text-xl font-bold text-gray-800">Formulário de Serviço</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div id="status" class="flex items-center text-sm">
+                    <span id="status-indicator" class="status-indicator status-offline"></span>
+                    <span id="status-text">Offline</span>
+                </div>
+                <button id="export-btn" class="btn-primary px-4 py-2 rounded-lg flex items-center">
+                    <i class="fas fa-download mr-2"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-6">
+        <section class="form-section">
+            <h2 class="text-xl font-semibold flex items-center">
+                <i class="fas fa-clipboard-list text-blue-600 mr-2"></i> Dados do Serviço
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                    <div>
+                        <label for="cliente" class="block text-sm font-medium text-gray-700 mb-1">Cliente *</label>
+                        <input type="text" id="cliente" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    
+                    <div>
+                        <label for="cidade" class="block text-sm font-medium text-gray-700 mb-1">Cidade - UF *</label>
+                        <input type="text" id="cidade" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    
+                    <div>
+                        <label for="equipamento" class="block text-sm font-medium text-gray-700 mb-1">Equipamento *</label>
+                        <select id="equipamento" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Selecione o equipamento</option>
+                            <option value="SELAVES WI-FI">SELAVES WI-FI</option>
+                            <option value="SELAVES">SELAVES</option>
+                            <option value="PS/SEL - WIFI">PS/SEL - WIFI</option>
+                            <option value="BD15-SD/PS">BD15-SD/PS</option>
+                            <option value="BD15-SD/SEL">BD15-SD/SEL</option>
+                            <option value="BD15-BT">BD15-BT</option>
+                            <option value="BCD-15">BCD-15</option>
+                            <option value="SP-501">SP-501</option>
+                            <option value="SP-300">SP-300</option>
+                            <option value="SP-SEQ">SP-SEQ</option>
+                            <option value="CS-P">CS-P</option>
+                            <option value="CS-R">CS-R</option>
+                            <option value="OUTRO">OUTRO</option>
+                        </select>
+                        <input type="text" id="equipamento-outro" placeholder="Especifique o equipamento" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mt-2 hidden">
+                    </div>
+                    
+                    <div>
+                        <label for="tecnico" class="block text-sm font-medium text-gray-700 mb-1">Técnico *</label>
+                        <input type="text" id="tecnico" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    
+                    <div>
+                        <label for="servico" class="block text-sm font-medium text-gray-700 mb-1">Serviço Prestado *</label>
+                        <select id="servico" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Selecione o tipo de serviço</option>
+                            <option value="INSTALAÇÃO">INSTALAÇÃO</option>
+                            <option value="STARTUP">STARTUP</option>
+                            <option value="MANUTENÇÃO">MANUTENÇÃO</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="data-inicial" class="block text-sm font-medium text-gray-700 mb-1">Data Inicial *</label>
+                            <input type="date" id="data-inicial" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label for="hora-inicial" class="block text-sm font-medium text-gray-700 mb-1">Hora Inicial *</label>
+                            <input type="time" id="hora-inicial" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="data-final" class="block text-sm font-medium text-gray-700 mb-1">Data Final *</label>
+                            <input type="date" id="data-final" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label for="hora-final" class="block text-sm font-medium text-gray-700 mb-1">Hora Final *</label>
+                            <input type="time" id="hora-final" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label for="veiculo" class="block text-sm font-medium text-gray-700 mb-1">Veículo</label>
+                        <input type="text" id="veiculo" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    
+                    <div>
+                        <label for="estoque" class="block text-sm font-medium text-gray-700 mb-1">Estoque</label>
+                        <select id="estoque" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Selecione o estoque</option>
+                            <option value="ESTOQUE SELAVES 16">ESTOQUE SELAVES 16</option>
+                            <option value="ESTOQUE SELAVES 22">ESTOQUE SELAVES 22</option>
+                            <option value="ESTOQUE SELAVES 29">ESTOQUE SELAVES 29</option>
+                            <option value="ESTOQUE SELAVES 44">ESTOQUE SELAVES 44</option>
+                            <option value="ESTOQUE SELAVES 53">ESTOQUE SELAVES 53</option>
+                            <option value="ESTOQUE SELAVES 54">ESTOQUE SELAVES 54</option>
+                            <option value="ESTOQUE SP-501 48">ESTOQUE SP-501 48</option>
+                            <option value="ESTOQUE SP-501 NOVO 01">ESTOQUE SP-501 NOVO 01</option>
+                            <option value="ESTOQUE SP-501 NOVO 02">ESTOQUE SP-501 NOVO 02</option>
+                            <option value="ESTOQUE SEQ GIRADI">ESTOQUE SEQ GIRADI</option>
+                            <option value="ESTOQUE SEQ MATHEUS">ESTOQUE SEQ MATHEUS</option>
+                            <option value="ESTOQUE SEQ LEONARDO">ESTOQUE SEQ LEONARDO</option>
+                            <option value="ESTOQUE SEQ CAROBA">ESTOQUE SEQ CAROBA</option>
+                            <option value="ESTOQUE SEQ LUIZ V.">ESTOQUE SEQ LUIZ V.</option>
+                            <option value="ESTOQUE SEQ ARILDO">ESTOQUE SEQ ARILDO</option>
+                            <option value="CS 55">CS 55</option>
+                            <option value="CS 56">CS 56</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label for="numero-serie" class="block text-sm font-medium text-gray-700 mb-1">Nº de Série</label>
+                        <input type="text" id="numero-serie" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="####/ano">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="form-section">
+            <h2 class="text-xl font-semibold flex items-center">
+                <i class="fas fa-file-alt text-blue-600 mr-2"></i> Relatório da Máquina
+            </h2>
+            
+            <div>
+                <label for="relatorio-maquina" class="block text-sm font-medium text-gray-700 mb-1">Defeitos Encontrados e Solução *</label>
+                <textarea id="relatorio-maquina" rows="5" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Descreva os defeitos encontrados e as soluções aplicadas..."></textarea>
+            </div>
+        </section>
+
+        <section class="form-section">
+            <h2 class="text-xl font-semibold flex items-center">
+                <i class="fas fa-camera text-blue-600 mr-2"></i> Fotos da Máquina
+            </h2>
+            
+            <div class="mb-4">
+                <input type="file" id="fotos-input" accept="image/*" multiple class="hidden">
+                <button id="add-fotos-btn" class="btn-secondary px-4 py-2 rounded-lg flex items-center">
+                    <i class="fas fa-plus mr-2"></i> Adicionar Fotos
+                </button>
+                <p class="text-sm text-gray-500 mt-1">Máximo de 10 fotos</p>
+            </div>
+            
+            <div id="fotos-preview" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            </div>
+        </section>
+
+        <section class="form-section">
+            <h2 class="text-xl font-semibold flex items-center">
+                <i class="fas fa-signature text-blue-600 mr-2"></i> Assinaturas
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">Assinatura do Cliente *</h3>
+                    <div class="mb-2">
+                        <label for="cliente-nome" class="block text-sm font-medium text-gray-700 mb-1">Nome Completo *</label>
+                        <input type="text" id="cliente-nome" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div class="mb-2">
+                        <label for="cliente-email" class="block text-sm font-medium text-gray-700 mb-1">E-mail *</label>
+                        <input type="email" id="cliente-email" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <canvas id="assinatura-cliente" class="signature-canvas w-full h-40"></canvas>
+                    <button id="limpar-cliente" class="mt-2 text-sm text-red-500 hover:text-red-700 transition duration-150">
+                        <i class="fas fa-eraser mr-1"></i> Limpar Assinatura
+                    </button>
+                </div>
+                
+                <div>
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">Assinatura do Técnico *</h3>
+                    <div class="mb-2">
+                        <label for="tecnico-nome" class="block text-sm font-medium text-gray-700 mb-1">Nome Completo *</label>
+                        <input type="text" id="tecnico-nome" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <canvas id="assinatura-tecnico" class="signature-canvas w-full h-40"></canvas>
+                    <button id="limpar-tecnico" class="mt-2 text-sm text-red-500 hover:text-red-700 transition duration-150">
+                        <i class="fas fa-eraser mr-1"></i> Limpar Assinatura
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class="form-section">
+            <h2 class="text-xl font-semibold flex items-center">
+                <i class="fas fa-boxes text-blue-600 mr-2"></i> Materiais Utilizados
+            </h2>
+            
+            <div class="mb-4">
+                <div class="flex space-x-2">
+                    <input type="text" id="material-input" list="materiais-list" placeholder="Digite código ou nome do material" class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    <datalist id="materiais-list"></datalist>
+                    <input type="number" id="material-qtd" min="1" placeholder="Qtd" class="w-24 p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    <button id="add-material-btn" class="btn-primary px-4 py-2 rounded-lg">
+                        <i class="fas fa-plus mr-1"></i> Adicionar
+                    </button>
+                </div>
+            </div>
+            
+            <div id="materiais-lista" class="space-y-2">
+            </div>
+        </section>
+    </main>
+
+    <div id="image-modal" class="modal">
+        <span class="modal-close">&times;</span>
+        <img class="modal-content" id="modal-image">
+    </div>
+
+    <div id="notification" class="notification hidden">
+        <div class="flex items-center">
+            <i id="notification-icon" class="mr-2"></i>
+            <span id="notification-text"></span>
+        </div>
+    </div>
+
+    <script>
+        // Dados do estoque
+const estoqueData = [
+    { codigo: '9318', material: 'ABRAÇADEIRA NYLON 100MMX2,5MM' },
+    { codigo: '3296', material: 'ABRAÇADEIRA NYLON 4,6MMX200MM' },
+    { codigo: '12525', material: 'ABRAÇADEIRA DAS GAVETAS SEQ' },
+    { codigo: '11292', material: 'ABRAÇADEIRAA COLETA SOLO' },
+    { codigo: '9763', material: 'ARRUELA LISA 1/2 GVZ' },
+    { codigo: '9320', material: 'ARRUELA LISA 1/4 INOX' },
+    { codigo: '9472', material: 'ARRUELA LISA M4 INOX' },
+    { codigo: '9619', material: 'BARRA DE PINOS 1X40 VIAS 11,2MM 180ş' },
+    { codigo: '9617', material: 'BARRA DE PINOS 1X40 VIAS 14,5MM 90ş' },
+    { codigo: '9970', material: 'BARRA DE PINOS 1X40 VIAS 17MM 90ş' },
+    { codigo: '9607', material: 'BARRA ROSCADA M4 INOX' },
+    { codigo: '7207', material: 'BATERIA 12VCC 7A' },
+    { codigo: '3592', material: 'BATERIA 12VCC 1,3A' },
+    { codigo: '10822', material: 'BATERIA 5VCC' },
+    { codigo: '9447', material: 'BOBINA 220V' },
+    { codigo: '9605', material: 'BLOCO DE CONTATO NO' },
+    { codigo: '9425', material: 'BLOCO DE CONTATO NF' },
+    { codigo: '10536', material: 'BORRACHA DE VEDAÇÃO' },
+    { codigo: '11272', material: 'BORNE SACK FUSIVEL' },
+    { codigo: '9423', material: 'BORNE SACK BEGE' },
+    { codigo: '12485', material: 'BORNE SACK AZUL' },
+    { codigo: '9399', material: 'BOTÃO DE PULSO' },
+    { codigo: '9415', material: 'BOTÃO DE EMERGÊNCIA' },
+    { codigo: '2454', material: 'BUCHA M8' },
+    { codigo: '9964', material: 'BUCHA METALICA MACHO 1/4' },
+    { codigo: '11597', material: 'BUCHA METALICA MACHO 1/8' },
+    { codigo: '4002', material: 'CABO DE ALIMENTAÇÃO 2,5MM TRIPOLAR' },
+    { codigo: '9478', material: 'CABO AWG 4X' },
+    { codigo: '10570', material: 'CABO DE AÇO 1/8 GALV 3.2' },
+    { codigo: '10051', material: 'CABO FLAT COLORIDO 20 VIAS' },
+    { codigo: '9871', material: 'CABO DE COMANDO 1X0,5MM AZUL' },
+    { codigo: '10541', material: 'CABO FLEX 1,5MM VERDE' },
+    { codigo: '9875', material: 'CABO VERMELHO 1X0,5MM' },
+    { codigo: '9873', material: 'CABO PRETO 1X0,5MM' },
+    { codigo: '10551', material: 'CABO PP 3X0,5MM' },
+    { codigo: '2642', material: 'CABO PP 2X1MM' },
+    { codigo: '10550', material: 'CABO PP 2X0,5MM' },
+    { codigo: '6662', material: 'CABO USB CONTROLADOR' },
+    { codigo: '9849', material: 'CABO DE REDE' },
+    { codigo: '10654', material: 'CASE DO RASPBERRY' },
+    { codigo: '8257', material: 'CAIXA DE INTERLIGAÇÃO SENSORES MAX E MIN' },
+    { codigo: '8249', material: 'CAIXA DE INTERLIGAÇÃO DAS CÉLULAS' },
+    { codigo: '9467', material: 'CAIXA OPACA 190X140X70' },
+    { codigo: '9400', material: 'CAIXA BX01 - 1 FURO 76X70X60' },
+    { codigo: '9401', material: 'CAIXA BX02 - 2 FURO' },
+    { codigo: '11602', material: 'KIT CAMERA MAIX BIT' },
+    { codigo: '9962', material: 'CAPACITOR POLIESTER 100K 63V' },
+    { codigo: '9271', material: 'CAPACITOR 47NF 400V' },
+    { codigo: '1106', material: 'CARREGADOR 12VCC 0,8A' },
+    { codigo: '12010', material: 'FONTE DE PAREDE 5 VCC 1A' },
+    { codigo: '9212', material: 'FONTE 12VCC 2A DE PAREDE' },
+    { codigo: '9444', material: 'FONTE NOBREAK FULL' },
+    { codigo: '9844', material: 'CARTÃO SD' },
+    { codigo: '12658', material: 'CÉLULA 20 KG' },
+    { codigo: '8750', material: 'CÉLULA DE CARGA BSPH10 100KG' },
+    { codigo: '9476', material: 'CÉLULA DE CARGA Z 500KG' },
+    { codigo: '9693', material: 'CÉLULA DE CARGA Z 100KG' },
+    { codigo: '9330', material: 'CÉLULA DE CARGA Z 50KG' },
+    { codigo: '6743', material: 'CHAPA DE PROTEÇÃO DO CARTÃO' },
+    { codigo: '9885', material: 'CHAPINHA DE Nº DE SÉRIE' },
+    { codigo: '9876', material: 'CHAVE ALAVANCA LD' },
+    { codigo: '9397', material: 'CHAVE LDL' },
+    { codigo: '10569', material: 'CLIP PARA CABO DE AÇO 1/8 - 3,2' },
+    { codigo: '5670', material: 'CONTATOR 12 A 220VAC' },
+    { codigo: '9402', material: 'CHAVE SELETORA XB2 2 POSIÇÕES' },
+    { codigo: '9636', material: 'CONECTOR MIKE FEMEA 4 PINOS' },
+    { codigo: '9281', material: 'CONECTOR MIKE MACHO 4 PINOS' },
+    { codigo: '8837', material: 'CONEXAO RETA 1/4XM4' },
+    { codigo: '8826', material: 'CONEXAO RETA 1/4XM6' },
+    { codigo: '3882', material: 'CONEXÃO RETA 1/8XM4' },
+    { codigo: '10012', material: 'CONEXÃO RETA LATÃO' },
+    { codigo: '8836', material: 'CONEXAO UNIÃO RETA 8MM' },
+    { codigo: '8812', material: 'CONJUNTO LUBRIFIL MINI 1/4' },
+    { codigo: '10580', material: 'FONTE HI-LINK 12V' },
+    { codigo: '11812', material: 'FONTE HI-LINK 5V' },
+    { codigo: '10828', material: 'CONECTOR MICRO USB PS/SEL WIFI' },
+    { codigo: '9633', material: 'CORDA NATURAL BRANCA 4MM' },
+    { codigo: '10655', material: 'COOLER PARA RASPBERRY' },
+    { codigo: '9609', material: 'CORRENTE DE AÇO' },
+    { codigo: '9690', material: 'DIODO 1N4007' },
+    { codigo: '9845', material: 'ENGATE RAPIDO 1/4 MACHO' },
+    { codigo: '9842', material: 'ENGATE RAPIDO 1/4 FEMÊA' },
+    { codigo: '9260', material: 'ESPAÇADOR NYLON GRANDE 7X3X10' },
+    { codigo: '9263', material: 'ESPAÇADOR NYLON GRANDE 7X3X10' },
+    { codigo: '9373', material: 'ESPAÇADOR C/ ROSCA' },
+    { codigo: '9334', material: 'FUSIVEL 1A PEQUENO' },
+    { codigo: '9826', material: 'FUSIVEL 0,5A PEQUENO' },
+    { codigo: '9867', material: 'GERENCIADOR DO RASP PAINEL IHM' },
+    { codigo: '9258', material: 'ISOLADOR CHAPEU' },
+    { codigo: '12269', material: 'INDICADOR SELAVES WI-FI' },
+    { codigo: '3090', material: 'INDICADOR SP-501' },
+    { codigo: '12893', material: 'HUB' },
+    { codigo: '9694', material: 'KIT BOTÃO REGISTRA' },
+    { codigo: '8330', material: 'KIT DISTORCEDOR' },
+    { codigo: '5209', material: 'KIT ISOLADOR SISTEMA FIXO' },
+    { codigo: '10573', material: 'KIT ISOLADOR SISTEMA MOVEL' },
+    { codigo: '9396', material: 'MASCARA SP-300' },
+    { codigo: '11052', material: 'MASCARA DO TOUCH PAINEL IHM' },
+    { codigo: '9638', material: 'MICRO SD' },
+    { codigo: '9554', material: 'LED VERMELHO DIFUSO' },
+    { codigo: '13728', material: 'LED BICOLOR' },
+    { codigo: '9857', material: 'LUVA 1/4 METALICA SEXTAVADA' },
+    { codigo: '9856', material: 'MANGUEIRA PU6' },
+    { codigo: '9961', material: 'MANGUEIRA PU8' },
+    { codigo: '9379', material: 'MÓDULO RELÓGIO RASPBERRY' },
+    { codigo: '9542', material: 'MÓDULO RELÓGIO DO INDICADOR TRADICIONAL' },
+    { codigo: '4719', material: 'MÓDULO AD' },
+    { codigo: '9547', material: 'MÓDULO DE LEITOR SD' },
+    { codigo: '10825', material: 'MÓDULO DE LEITOR MICRO SD' },
+    { codigo: '9546', material: 'MÓDULO RELÉ 16 CANAIS' },
+    { codigo: '9481', material: 'MÓDULO RELÉ 4 CANAIS 12VCC' },
+    { codigo: '9387', material: 'MÓDULO DISPLAY LCD 2 LINHAS' },
+    { codigo: '10656', material: 'MONITOR TOUCH SCREEN' },
+    { codigo: '6560', material: 'MOSQUETÃO' },
+    { codigo: '9948', material: 'ÓLEO DE COMPRESSOR' },
+    { codigo: '3154', material: 'ÓLEO PNEUMATICO' },
+    { codigo: '9338', material: 'PARAFUSO PHILIPS 2,5X20' },
+    { codigo: '9342', material: 'PARAFUSO PHILIPS M4X12' },
+    { codigo: '9847', material: 'PARAFUSO OLIAL 6MM' },
+    { codigo: '9338', material: 'PARAFUSO PHILIPS 2,5X20MM INOX' },
+    { codigo: '9339', material: 'PARAFUSO PHILIPS CONICO 2,5X20MM INOX' },
+    { codigo: '10763', material: 'PF PHILIPS 3,5X9,5' },
+    { codigo: '10579', material: 'PARAFUSO PHILIPS M3X25MM INOX' },
+    { codigo: '9342', material: 'PARAFUSO PHILIPS M4X12MM INOX' },
+    { codigo: '9767', material: 'PARAFUSO SEXTAVADO M10X60 INOX' },
+    { codigo: '9768', material: 'PARAFUSO SEXTAVADO M6X16MM INOX' },
+    { codigo: '2767', material: 'PARAFUSO SEXTAVADO M8X55MM INOX' },
+    { codigo: '9483', material: 'PARAFUSO ALLEN ABAULADO M4X12MM' },
+    { codigo: '9769', material: 'PARAFUSO ALLEN CILINDRICO M4X20MM' },
+    { codigo: '9350', material: 'PARAFUSO ALLEN CILINDRICO M6X10MM' },
+    { codigo: '10549', material: 'PARAFUSO ALLEN CONICO M4X35MM' },
+    { codigo: '9734', material: 'PARAFUSO ALLEN CONICO M6X16MM' },
+    { codigo: '10117', material: 'PARAFUSO BROCANTE 5,5X25MM' },
+    { codigo: '10571', material: 'PARAFUSO SOBERBO SEXTAVADO 1/4X50MM' },
+    { codigo: '10572', material: 'PARAFUSO SEXTAVADO 1/4X3/4' },
+    { codigo: '9266', material: 'PARAFUSO NYLON FENDA' },
+    { codigo: '11852', material: 'PRESILHA COLETA SOLO' },
+    { codigo: '8816', material: 'PISTÃO 25X250MM' },
+    { codigo: '9965', material: 'PISTÃO MINI 16X60MM' },
+    { codigo: '9442', material: 'PISTÃO 25X125MM' },
+    { codigo: '1693', material: 'PISTÃO 25X150MM' },
+    { codigo: '6158', material: 'PILHA DO CLOCK' },
+    { codigo: '10041', material: 'PLACA LED MONTADA DO SEQ' },
+    { codigo: '3415', material: 'PLC DE CORTE SP-501' },
+    { codigo: '2818', material: 'PLC DE CORTE SP-300' },
+    { codigo: '9389', material: 'PLC CONTROLADOR MEGA' },
+    { codigo: '9458', material: 'PLC CONTROLADOR UNO' },
+    { codigo: '10790', material: 'CONTROLADOR ESP-32 PS/SEL WIFI' },
+    { codigo: '9882', material: 'PLC SEL-BOX 2.0' },
+    { codigo: '10790', material: 'CONTROLADOR WI-FI' },
+    { codigo: '12340', material: 'PLACA RASPBERRY' },
+    { codigo: '13214', material: 'PALCA CS MONTADA' },
+    { codigo: '8125', material: 'INDICADOR TRADICIONAL' },
+    { codigo: '7351', material: 'INDICADOR IHM' },
+    { codigo: '8127', material: 'ESCRAVO' },
+    { codigo: '9550', material: 'PLATAFORMA INFERIOR CÉLULA' },
+    { codigo: '3437', material: 'PLATAFORMA SUPERIOR CÉLULA' },
+    { codigo: '8814', material: 'PONTEIRA ANGULAR' },
+    { codigo: '8809', material: 'PONTEIRA ROTULAR' },
+    { codigo: '9781', material: 'PORCA M6 INOX' },
+    { codigo: '9359', material: 'PORLOCK M10 INOX' },
+    { codigo: '9360', material: 'PORLOCK M3' },
+    { codigo: '9784', material: 'PORCA 1/4' },
+    { codigo: '9361', material: 'PORLOCK M4' },
+    { codigo: '9362', material: 'PORLOCK M6' },
+    { codigo: '3256', material: 'PORLOCK M8' },
+    { codigo: '9363', material: 'PORCA 2,5 INOX' },
+    { codigo: '9779', material: 'PORCA HASTE DOS PISTÕES 25X125/150/250' },
+    { codigo: '9748', material: 'PORCA HASTE DOS PISTÕES MINI 16X80' },
+    { codigo: '9264', material: 'PORCA NYLON' },
+    { codigo: '9274', material: 'PORTA FUSIVEL' },
+    { codigo: '9549', material: 'PG 11' },
+    { codigo: '9364', material: 'PG7' },
+    { codigo: '9532', material: 'REGULADOR 12V P/ 5V' },
+    { codigo: '9112', material: 'REGULADOR 7812' },
+    { codigo: '9900', material: 'RELÉ ACOPLADOR 12V' },
+    { codigo: '11978', material: 'BASE DO RELÉ ACOPLADOR SLIM' },
+    { codigo: '11981', material: 'RELÉ ACOPLADOR SLIM 220V' },
+    { codigo: '10653', material: 'RELÉ TÉRMICO 1,6 - 2,5 A' },
+    { codigo: '4595', material: 'RELÉ TERMICO 4,0 - 6,3A' },
+    { codigo: '8829', material: 'REGULADOR DE FLUXO 6X1/8' },
+    { codigo: '9934', material: 'RESISTOR 10K2 1% 1/4W' },
+    { codigo: '9930', material: 'RJ45' },
+    { codigo: '11181', material: 'ROTEADOR TP-LINK' },
+    { codigo: '12206', material: 'SENSOR CAPACITIVO CA30' },
+    { codigo: '9494', material: 'SENSOR BANANA' },
+    { codigo: '8833', material: 'SILENCIADOR BRONZE 1/8' },
+    { codigo: '13213', material: 'SLAT COLETA SOLO' },
+    { codigo: '11648', material: 'SINALEIRO LED VERDE - 110/220V' },
+    { codigo: '9273', material: 'SINDAL 10 MM' },
+    { codigo: '10050', material: 'SINDAL 16 MM' },
+    { codigo: '9557', material: 'SUPORTE DO LED 5MM' },
+    { codigo: '9978', material: 'TECLADO BT' },
+    { codigo: '9836', material: 'TECLADO BD15-SD/PS' },
+    { codigo: '9859', material: 'TECLADO BD15-SD/SEL' },
+    { codigo: '9398', material: 'TECLADO BD15-SEL' },
+    { codigo: '9405', material: 'TECLADO SP-501 GRANDE' },
+    { codigo: '9404', material: 'TECLADO SP-501 PEQUENO' },
+    { codigo: '8895', material: 'TECLADO PS/SEL WIFI' },
+    { codigo: '9956', material: 'TECLADO SEQUENCIAL' },
+    { codigo: '9393', material: 'TERMINAL FEMEA TOTAL' },
+    { codigo: '9368', material: 'TERMINAL OLHAL AZUL' },
+    { codigo: '9368', material: 'TERMINAL OLHAL PEQUENO VERMELHO' },
+    { codigo: '10575', material: 'TERMINAL GARFO PEQUENO VERMELHO' },
+    { codigo: '9911', material: 'TERMINAL GARFO AZUL' },
+    { codigo: '9391', material: 'TERMINAL TUBULAR 0,75MM BRANCO' },
+    { codigo: '9431', material: 'TERMINAL TUBULAR 1MM VERMELHO' },
+    { codigo: '9432', material: 'TERMINAL TUBULAR 1,5 MM PRETO' },
+    { codigo: '9870', material: 'TERMINAL TUBULAR 1MM DUPLO VERMELHO' },
+    { codigo: '9983', material: 'T PU8' },
+    { codigo: '9984', material: 'ABRAÇADEIRA T PU8' },
+    { codigo: '9509', material: 'T MULTIPLO PU6' },
+    { codigo: '10022', material: 'TOMADA FEMEA' },
+    { codigo: '8820', material: 'VALVULA ESFERA 1/4' },
+    { codigo: '8822', material: 'VALVULA SOLENÓIDE 220V' },
+    { codigo: '8818', material: 'VALVULA SOLENÓIDE 12V' },
+    { codigo: '7212', material: 'ACRILICO DA BOBINA DA VALVULA' },
+    { codigo: '9747', material: 'PORCA PROT. BOTÃO REGISTRA' }
+];
+
+        // Estado da aplicação
+        let state = {
+            fotos: [],
+            materiais: [],
+            assinaturas: {
+                cliente: null,
+                tecnico: null
+            }
+        };
+
+        // Elementos DOM
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+        const exportBtn = document.getElementById('export-btn');
+        const fotosInput = document.getElementById('fotos-input');
+        const addFotosBtn = document.getElementById('add-fotos-btn');
+        const fotosPreview = document.getElementById('fotos-preview');
+        const materialInput = document.getElementById('material-input');
+        const materialQtd = document.getElementById('material-qtd');
+        const addMaterialBtn = document.getElementById('add-material-btn');
+        const materiaisLista = document.getElementById('materiais-lista');
+        const materiaisDatalist = document.getElementById('materiais-list');
+        const equipamentoSelect = document.getElementById('equipamento');
+        const equipamentoOutro = document.getElementById('equipamento-outro');
+        const notification = document.getElementById('notification');
+        const notificationIcon = document.getElementById('notification-icon');
+        const notificationText = document.getElementById('notification-text');
+        const imageModal = document.getElementById('image-modal');
+        const modalImage = document.getElementById('modal-image');
+        const modalClose = document.querySelector('.modal-close');
+
+        // Configuração dos canvas de assinatura
+        const canvasCliente = document.getElementById('assinatura-cliente');
+        const canvasTecnico = document.getElementById('assinatura-tecnico');
+        const ctxCliente = canvasCliente.getContext('2d');
+        const ctxTecnico = canvasTecnico.getContext('2d');
+        let isDrawingCliente = false;
+        let isDrawingTecnico = false;
+        let lastXCliente = 0;
+        let lastYCliente = 0;
+        let lastXTecnico = 0;
+        let lastYTecnico = 0;
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            initApp();
+        });
+
+        function initApp() {
+            updateOnlineStatus();
+            window.addEventListener('online', updateOnlineStatus);
+            window.addEventListener('offline', updateOnlineStatus);
+
+            setupEventListeners();
+            setupSignatureCanvas(canvasCliente, ctxCliente, 'cliente');
+            setupSignatureCanvas(canvasTecnico, ctxTecnico, 'tecnico');
+            populateMaterialsDatalist();
+
+            // Registrar Service Worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registrado:', registration);
+                    })
+                    .catch(error => {
+                        console.log('Falha no Service Worker:', error);
+                    });
+            }
+        }
+
+        function updateOnlineStatus() {
+            if (navigator.onLine) {
+                statusIndicator.className = 'status-indicator status-online';
+                statusText.textContent = 'Online';
+            } else {
+                statusIndicator.className = 'status-indicator status-offline';
+                statusText.textContent = 'Offline';
+            }
+        }
+
+        function setupEventListeners() {
+            exportBtn.addEventListener('click', exportData);
+            addFotosBtn.addEventListener('click', () => fotosInput.click());
+            fotosInput.addEventListener('change', handleFileSelect);
+            addMaterialBtn.addEventListener('click', addMaterial);
+            materialInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') addMaterial();
+            });
+
+            document.getElementById('limpar-cliente').addEventListener('click', () => clearCanvas('cliente'));
+            document.getElementById('limpar-tecnico').addEventListener('click', () => clearCanvas('tecnico'));
+
+            equipamentoSelect.addEventListener('change', function() {
+                equipamentoOutro.classList.toggle('hidden', this.value !== 'OUTRO');
+            });
+
+            modalClose.addEventListener('click', () => {
+                imageModal.style.display = 'none';
+            });
+
+            window.addEventListener('click', (e) => {
+                if (e.target === imageModal) {
+                    imageModal.style.display = 'none';
+                }
+            });
+        }
+
+        function setupSignatureCanvas(canvas, ctx, tipo) {
+            function getMousePos(e) {
+                const rect = canvas.getBoundingClientRect();
+                return {
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top
+                };
+            }
+
+            function getTouchPos(e) {
+                const rect = canvas.getBoundingClientRect();
+                const touch = e.touches[0];
+                return {
+                    x: touch.clientX - rect.left,
+                    y: touch.clientY - rect.top
+                };
+            }
+
+            function draw(x, y, isCliente) {
+                const config = isCliente ? 
+                    { ctx: ctxCliente, drawing: isDrawingCliente, lastX: lastXCliente, lastY: lastYCliente } :
+                    { ctx: ctxTecnico, drawing: isDrawingTecnico, lastX: lastXTecnico, lastY: lastYTecnico };
+
+                if (!config.drawing) return;
+
+                config.ctx.beginPath();
+                config.ctx.moveTo(config.lastX, config.lastY);
+                config.ctx.lineTo(x, y);
+                config.ctx.stroke();
+
+                if (isCliente) {
+                    lastXCliente = x;
+                    lastYCliente = y;
+                    state.assinaturas.cliente = canvas.toDataURL();
+                } else {
+                    lastXTecnico = x;
+                    lastYTecnico = y;
+                    state.assinaturas.tecnico = canvas.toDataURL();
+                }
+            }
+
+            // Eventos de mouse
+            canvas.addEventListener('mousedown', (e) => {
+                if (tipo === 'cliente') {
+                    isDrawingCliente = true;
+                    const pos = getMousePos(e);
+                    lastXCliente = pos.x;
+                    lastYCliente = pos.y;
+                } else {
+                    isDrawingTecnico = true;
+                    const pos = getMousePos(e);
+                    lastXTecnico = pos.x;
+                    lastYTecnico = pos.y;
+                }
+            });
+
+            canvas.addEventListener('mouseup', () => {
+                if (tipo === 'cliente') isDrawingCliente = false;
+                else isDrawingTecnico = false;
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                const pos = getMousePos(e);
+                draw(pos.x, pos.y, tipo === 'cliente');
+            });
+
+            canvas.addEventListener('mouseout', () => {
+                if (tipo === 'cliente') isDrawingCliente = false;
+                else isDrawingTecnico = false;
+            });
+
+            // Eventos de toque
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (tipo === 'cliente') {
+                    isDrawingCliente = true;
+                    const pos = getTouchPos(e);
+                    lastXCliente = pos.x;
+                    lastYCliente = pos.y;
+                } else {
+                    isDrawingTecnico = true;
+                    const pos = getTouchPos(e);
+                    lastXTecnico = pos.x;
+                    lastYTecnico = pos.y;
+                }
+            });
+
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                const pos = getTouchPos(e);
+                draw(pos.x, pos.y, tipo === 'cliente');
+            });
+
+            canvas.addEventListener('touchend', () => {
+                if (tipo === 'cliente') isDrawingCliente = false;
+                else isDrawingTecnico = false;
+            });
+
+            // Configurar estilo do traço
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#000';
+        }
+
+        function clearCanvas(tipo) {
+            if (tipo === 'cliente') {
+                ctxCliente.clearRect(0, 0, canvasCliente.width, canvasCliente.height);
+                state.assinaturas.cliente = null;
+            } else {
+                ctxTecnico.clearRect(0, 0, canvasTecnico.width, canvasTecnico.height);
+                state.assinaturas.tecnico = null;
+            }
+            showNotification('Assinatura limpa', 'info');
+        }
+
+        function populateMaterialsDatalist() {
+            estoqueData.forEach(item => {
+                const option = document.createElement('option');
+                option.value = `${item.codigo} – ${item.material}`;
+                materiaisDatalist.appendChild(option);
+            });
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            
+            if (state.fotos.length + files.length > 10) {
+                showNotification('Máximo de 10 arquivos permitidos', 'error');
+                return;
+            }
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                
+                // Remove a verificação de vídeo
+                if (!file.type.match('image.*')) {
+                    showNotification('Apenas imagens são permitidas', 'error');
+                    continue;
+                }
+
+                const reader = new FileReader();
+                
+                reader.onload = (function(file) {
+                    return function(e) {
+                        const fileData = {
+                            name: file.name,
+                            type: file.type,
+                            data: e.target.result,
+                            timestamp: new Date().toISOString()
+                        };
+                        
+                        state.fotos.push(fileData);
+                        renderPhotoPreview(fileData);
+                        showNotification('Foto adicionada', 'success');
+                    };
+                })(file);
+                
+                reader.readAsDataURL(file);
+            }
+            
+            fotosInput.value = '';
+        }
+
+        function renderPhotoPreview(fileData) {
+            const previewItem = document.createElement('div');
+            previewItem.className = 'relative group';
+            
+            // Remove a condição para vídeo - agora só mostra imagens
+            previewItem.innerHTML = `
+                <img src="${fileData.data}" class="photo-preview cursor-pointer">
+                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <button class="view-photo-btn p-2 bg-white rounded-full shadow-lg text-gray-800 mr-1" data-index="${state.fotos.length - 1}">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="delete-photo-btn p-2 bg-white rounded-full shadow-lg text-red-600" data-index="${state.fotos.length - 1}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            
+            fotosPreview.appendChild(previewItem);
+            
+            previewItem.querySelector('.view-photo-btn').addEventListener('click', function() {
+                const index = parseInt(this.getAttribute('data-index'));
+                viewPhoto(index);
+            });
+            
+            previewItem.querySelector('.delete-photo-btn').addEventListener('click', function() {
+                const index = parseInt(this.getAttribute('data-index'));
+                deletePhoto(index);
+            });
+        }
+
+        function viewPhoto(index) {
+            const fileData = state.fotos[index];
+            modalImage.src = fileData.data;
+            imageModal.style.display = 'flex';
+        }
+
+        function deletePhoto(index) {
+            state.fotos.splice(index, 1);
+            renderPhotos();
+            showNotification('Arquivo removido', 'info');
+        }
+
+        function renderPhotos() {
+            fotosPreview.innerHTML = '';
+            state.fotos.forEach((fileData, index) => {
+                const previewItem = document.createElement('div');
+                previewItem.className = 'relative group';
+                
+                previewItem.innerHTML = `
+                    <img src="${fileData.data}" class="photo-preview cursor-pointer">
+                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <button class="view-photo-btn p-2 bg-white rounded-full shadow-lg text-gray-800 mr-1" data-index="${index}">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="delete-photo-btn p-2 bg-white rounded-full shadow-lg text-red-600" data-index="${index}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                
+                fotosPreview.appendChild(previewItem);
+                
+                previewItem.querySelector('.view-photo-btn').addEventListener('click', function() {
+                    const idx = parseInt(this.getAttribute('data-index'));
+                    viewPhoto(idx);
+                });
+                
+                previewItem.querySelector('.delete-photo-btn').addEventListener('click', function() {
+                    const idx = parseInt(this.getAttribute('data-index'));
+                    deletePhoto(idx);
+                });
+            });
+        }
+
+        function addMaterial() {
+            const material = materialInput.value.trim();
+            const qtd = materialQtd.value.trim();
+            
+            if (!material || !qtd || Number(qtd) <= 0) {
+                showNotification('Preencha o material e a quantidade válida', 'error');
+                return;
+            }
+            
+            let codigo = '';
+            let descricao = material;
+            
+            if (material.indexOf(' – ') !== -1) {
+                const parts = material.split(' – ');
+                codigo = parts[0].trim();
+                descricao = parts.slice(1).join(' – ').trim();
+            } else if (/^\d+/.test(material)) {
+                codigo = material;
+                descricao = '';
+            }
+            
+            state.materiais.push({
+                codigo,
+                descricao: descricao || material,
+                quantidade: Number(qtd)
+            });
+            
+            materialInput.value = '';
+            materialQtd.value = '';
+            renderMateriais();
+            showNotification('Material adicionado', 'success');
+        }
+
+        function renderMateriais() {
+            materiaisLista.innerHTML = '';
+            
+            state.materiais.forEach((item, index) => {
+                const materialItem = document.createElement('div');
+                materialItem.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-lg';
+                materialItem.innerHTML = `
+                    <div>
+                        <span class="font-medium">${item.descricao}</span>
+                        ${item.codigo ? `<span class="text-sm text-gray-500 ml-2">(${item.codigo})</span>` : ''}
+                        <span class="text-blue-600 font-semibold ml-2">- ${item.quantidade} un.</span>
+                    </div>
+                    <button class="delete-material-btn text-red-500 hover:text-red-700 transition" data-index="${index}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                `;
+                
+                materiaisLista.appendChild(materialItem);
+            });
+            
+            document.querySelectorAll('.delete-material-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const index = parseInt(this.getAttribute('data-index'));
+                    state.materiais.splice(index, 1);
+                    renderMateriais();
+                    showNotification('Material removido', 'info');
+                });
+            });
+        }
+
+        function collectFormData() {
+            return {
+                cliente: document.getElementById('cliente').value,
+                cidade: document.getElementById('cidade').value,
+                equipamento: document.getElementById('equipamento').value,
+                equipamentoOutro: document.getElementById('equipamento-outro').value,
+                tecnico: document.getElementById('tecnico').value,
+                servico: document.getElementById('servico').value,
+                dataInicial: document.getElementById('data-inicial').value,
+                horaInicial: document.getElementById('hora-inicial').value,
+                dataFinal: document.getElementById('data-final').value,
+                horaFinal: document.getElementById('hora-final').value,
+                veiculo: document.getElementById('veiculo').value,
+                estoque: document.getElementById('estoque').value,
+                numeroSerie: document.getElementById('numero-serie').value,
+                relatorioMaquina: document.getElementById('relatorio-maquina').value,
+                clienteNome: document.getElementById('cliente-nome').value,
+                clienteEmail: document.getElementById('cliente-email').value,
+                tecnicoNome: document.getElementById('tecnico-nome').value
+            };
+        }
+
+        function validateForm() {
+            const requiredFields = [
+                'cliente', 'cidade', 'equipamento', 'tecnico', 'servico',
+                'data-inicial', 'hora-inicial', 'data-final', 'hora-final',
+                'relatorio-maquina', 'cliente-nome', 'cliente-email', 'tecnico-nome'
+            ];
+
+            for (const fieldId of requiredFields) {
+                const field = document.getElementById(fieldId);
+                if (!field.value.trim()) {
+                    showNotification(`Preencha o campo: ${field.labels[0].textContent}`, 'error');
+                    field.focus();
+                    return false;
+                }
+            }
+
+            if (!state.assinaturas.cliente) {
+                showNotification('Assinatura do cliente é obrigatória', 'error');
+                return false;
+            }
+
+            if (!state.assinaturas.tecnico) {
+                showNotification('Assinatura do técnico é obrigatória', 'error');
+                return false;
+            }
+
+            return true;
+        }
+
+        function exportData() {
+            if (!validateForm()) return;
+
+            const formData = collectFormData();
+            
+            const dataToExport = {
+                formData: formData,
+                fotos: state.fotos,
+                materiais: state.materiais,
+                assinaturas: state.assinaturas,
+                exportTimestamp: new Date().toISOString(),
+                version: '1.0'
+            };
+            
+            const dataStr = JSON.stringify(dataToExport, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            
+            // Nome do arquivo com data e cliente
+            const cliente = formData.cliente.replace(/[^a-zA-Z0-9]/g, '_');
+            const data = new Date().toISOString().split('T')[0];
+            link.download = `servico_${cliente}_${data}.json`;
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            showNotification('Dados exportados com sucesso!', 'success');
+        }
+
+        function showNotification(message, type) {
+            notification.className = `notification ${type}`;
+            notificationIcon.className = type === 'success' ? 'fas fa-check-circle' : 
+                                       type === 'error' ? 'fas fa-exclamation-circle' : 
+                                       'fas fa-info-circle';
+            notificationText.textContent = message;
+            
+            notification.style.display = 'flex';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
