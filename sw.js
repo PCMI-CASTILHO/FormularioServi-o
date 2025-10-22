@@ -1,5 +1,5 @@
 // Nome do cache — altere o número sempre que mudar algo
-const CACHE_NAME = 'formulario-cache-v5';
+const CACHE_NAME = 'formulario-cache-v6';
 
 // Lista de arquivos que o app precisa para funcionar offline
 const ASSETS = [
