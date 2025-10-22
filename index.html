@@ -1447,10 +1447,12 @@ async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
     let y = 20;
 
     // Logo e cabeçalho
-    if (logo) doc.addImage(logo, "PNG", 10, 5, 35, 20);
-    
     doc.setFillColor(0, 82, 163);
-    doc.rect(0, 5, pageWidth, 12, 'F');
+    doc.rect(0, 0, pageWidth, 17, 'F');
+	
+    if (logo) doc.addImage(logo, "PNG", 10, 1.5, 30, 15);
+    
+
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
@@ -1610,10 +1612,11 @@ async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
     let y = 20;
 
     // Logo e cabeçalho
-    if (logo) doc.addImage(logo, "PNG", 10, 5, 35, 20);
-    
     doc.setFillColor(0, 82, 163);
-    doc.rect(0, 5, pageWidth, 12, 'F');
+    doc.rect(0, 0, pageWidth, 17, 'F');
+	
+    if (logo) doc.addImage(logo, "PNG", 10, 1.5, 30, 15);
+    
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
