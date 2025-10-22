@@ -1063,6 +1063,409 @@ const estoqueData = [
 
             return true;
         }
+		
+		// ======== GERENCIAMENTO DE FORMULÁRIOS SALVOS ========
+
+// Mapeamento: keys internas -> ids reais dos inputs
+const FIELD_ID_MAP = {
+    cliente: 'cliente',
+    cidade: 'cidade',
+    equipamento: 'equipamento',
+    equipamentoOutro: 'equipamento-outro',
+    tecnico: 'tecnico',
+    servico: 'servico',
+    dataInicial: 'data-inicial',
+    horaInicial: 'hora-inicial',
+    dataFinal: 'data-final',
+    horaFinal: 'hora-final',
+    veiculo: 'veiculo',
+    estoque: 'estoque',
+    numeroSerie: 'numero-serie',
+    relatorioMaquina: 'relatorio-maquina',
+    clienteNome: 'cliente-nome',
+    clienteEmail: 'cliente-email',
+    tecnicoNome: 'tecnico-nome'
+};
+
+// Salva o formulário no localStorage (inclui fotos, materiais e assinaturas)
+function salvarFormularioLocal() {
+    if (!validateForm()) return;
+
+    const f = collectFormData();
+
+    const registro = {
+        id: Date.now(),
+        createdAt: new Date().toISOString(),
+        cliente: f.cliente || '',
+        servico: f.servico || '',
+        formData: f,
+        fotos: state.fotos || [],
+        materiais: state.materiais || [],
+        assinaturas: state.assinaturas || {}
+    };
+
+    let registros = JSON.parse(localStorage.getItem('formularios')) || [];
+    registros.push(registro);
+
+    // remove registros com mais de 24h (para manter limpo)
+    const agora = Date.now();
+    registros = registros.filter(r => (agora - r.id) < 24 * 60 * 60 * 1000);
+
+    localStorage.setItem('formularios', JSON.stringify(registros));
+    showNotification('Formulário salvo localmente!', 'success');
+    renderFormulariosSalvos();
+}
+
+// Renderiza a seção de formulários salvos (cria se não existir)
+function renderFormulariosSalvos() {
+    const containerId = 'formularios-salvos';
+    let container = document.getElementById(containerId);
+
+    if (!container) {
+        container = document.createElement('section');
+        container.id = containerId;
+        container.className = 'form-section';
+        document.querySelector('main').appendChild(container);
+    }
+
+    container.innerHTML = `
+        <h2 class="text-xl font-semibold flex items-center">
+            <i class="fas fa-history text-blue-600 mr-2"></i> Formulários Salvos
+        </h2>
+        <div id="lista-formularios" class="space-y-2"></div>
+    `;
+
+    const lista = container.querySelector('#lista-formularios');
+    let registros = JSON.parse(localStorage.getItem('formularios')) || [];
+
+    // Remove automaticamente itens com mais de 24h
+    const agora = Date.now();
+    registros = registros.filter(r => (agora - r.id) < 24 * 60 * 60 * 1000);
+    localStorage.setItem('formularios', JSON.stringify(registros));
+
+    if (registros.length === 0) {
+        lista.innerHTML = `<p class="text-gray-500 text-sm">Nenhum formulário salvo nas últimas 24h.</p>`;
+        return;
+    }
+
+    registros.slice().reverse().forEach(registro => { // mostra o mais recente primeiro
+        const dataLegivel = new Date(registro.id).toLocaleString();
+        const item = document.createElement('div');
+        item.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-lg shadow-sm';
+        item.innerHTML = `
+            <div>
+                <div class="font-medium text-gray-800">${registro.cliente || '—'}</div>
+                <div class="text-sm text-gray-500">${registro.servico || '—'} • <span class="text-blue-600">${dataLegivel}</span></div>
+            </div>
+            <div class="flex space-x-2">
+                <button class="btn-secondary px-3 py-1 rounded edit-btn" data-id="${registro.id}">
+                    <i class="fas fa-edit"></i> Editar
+                </button>
+                <button class="btn-secondary px-3 py-1 rounded text-red-600 delete-btn" data-id="${registro.id}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        lista.appendChild(item);
+    });
+
+    // Delegação dos eventos
+    lista.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const id = e.currentTarget.dataset.id;
+            carregarFormularioLocal(id);
+        });
+    });
+
+    lista.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const id = e.currentTarget.dataset.id;
+            removerFormularioLocal(id);
+        });
+    });
+}
+
+// Carrega um formulário salvo (popula inputs, materiais, fotos e assinaturas)
+function carregarFormularioLocal(id) {
+    let registros = JSON.parse(localStorage.getItem('formularios')) || [];
+    const registro = registros.find(r => String(r.id) === String(id));
+    if (!registro) {
+        showNotification('Registro não encontrado', 'error');
+        return;
+    }
+
+    const f = registro.formData || {};
+
+    // Preencher campos usando o mapa
+    for (const key in FIELD_ID_MAP) {
+        const elId = FIELD_ID_MAP[key];
+        const el = document.getElementById(elId);
+        if (!el) continue;
+
+        // Se valor existir em f, seta. Caso contrário limpa.
+        const val = f[key] !== undefined ? f[key] : '';
+        if (el.tagName === 'SELECT' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+            el.value = val;
+            // trigger change visual (ex: equipamento -> equipamento-outro visibility)
+            if (elId === 'equipamento') {
+                equipamentoOutro.classList.toggle('hidden', el.value !== 'OUTRO');
+            }
+        }
+    }
+
+    // Restaurar materiais e fotos no state e na UI
+    state.materiais = registro.materiais ? JSON.parse(JSON.stringify(registro.materiais)) : [];
+    renderMateriais();
+
+    state.fotos = registro.fotos ? JSON.parse(JSON.stringify(registro.fotos)) : [];
+    renderPhotos();
+
+    // Restaurar assinaturas: desenhar as imagens nos canvas
+    state.assinaturas = registro.assinaturas || { cliente: null, tecnico: null };
+    if (state.assinaturas.cliente) {
+        drawDataUrlOnCanvas(state.assinaturas.cliente, canvasCliente, ctxCliente);
+    } else {
+        ctxCliente.clearRect(0, 0, canvasCliente.width, canvasCliente.height);
+    }
+    if (state.assinaturas.tecnico) {
+        drawDataUrlOnCanvas(state.assinaturas.tecnico, canvasTecnico, ctxTecnico);
+    } else {
+        ctxTecnico.clearRect(0, 0, canvasTecnico.width, canvasTecnico.height);
+    }
+
+    showNotification('Formulário carregado para edição.', 'info');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Remove um formulário salvo
+function removerFormularioLocal(id) {
+    let registros = JSON.parse(localStorage.getItem('formularios')) || [];
+    registros = registros.filter(r => String(r.id) !== String(id));
+    localStorage.setItem('formularios', JSON.stringify(registros));
+    renderFormulariosSalvos();
+    showNotification('Formulário excluído.', 'info');
+}
+
+// Helper: desenha um dataURL em um canvas mantendo proporção
+function drawDataUrlOnCanvas(dataUrl, canvas, ctx) {
+    const img = new Image();
+    img.onload = () => {
+        // Limpa canvas e desenha centrado/escalado
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // ajustar resolução do canvas para evitar distorção em retina
+        // (supondo que canvas já tenha tamanho no CSS, ajustamos o tamanho real)
+        const ratio = window.devicePixelRatio || 1;
+        if (canvas.width !== canvas.clientWidth * ratio) {
+            canvas.width = canvas.clientWidth * ratio;
+            canvas.height = canvas.clientHeight * ratio;
+            ctx.scale(ratio, ratio);
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#000';
+        }
+        // desenhar
+        ctx.drawImage(img, 0, 0, canvas.clientWidth, canvas.clientHeight);
+    };
+    img.src = dataUrl;
+}
+
+// Inicia render dos formulários salvos ao carregar app
+document.addEventListener('DOMContentLoaded', renderFormulariosSalvos);
+
+// Opcional: ao clicar no botão export (Salvar) além de exportar, também salva localmente.
+// Se preferir NÃO salvar localmente ao exportar, remova a linha abaixo.
+exportBtn.addEventListener('click', function(e) {
+    // salvar local antes de exportar (já valida o formulário)
+    salvarFormularioLocal();
+    // continue com a rotina existente de export (a sua função exportData será chamada porque exportBtn já tem listener)
+});
+
+
+// ======== GERADOR AUTOMÁTICO DE PDF (Ficha + Relatório) ========
+
+// Requer jsPDF e AutoTable
+// const jsPDFScript1 = document.createElement("script");
+jsPDFScript1.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+document.head.appendChild(jsPDFScript1);
+
+// const jsPDFScript2 = document.createElement("script");
+jsPDFScript2.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js";
+document.head.appendChild(jsPDFScript2);
+
+// Aguarda os scripts carregarem
+jsPDFScript2.onload = () => {
+    console.log("Bibliotecas jsPDF carregadas.");
+};
+
+// Gera os dois PDFs automaticamente
+async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas) {
+    try {
+        await gerarFichaPDF(formData, materiais, fotos, assinaturas);
+        await gerarRelatorioPDF(formData, materiais, fotos, assinaturas);
+        showNotification("PDFs gerados com sucesso!", "success");
+    } catch (e) {
+        console.error("Erro ao gerar PDFs:", e);
+        showNotification("Erro ao gerar PDFs", "error");
+    }
+}
+
+// ========== FICHA DE MANUTENÇÃO ==========
+async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF("p", "mm", "a4");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const lineHeight = 7;
+    let y = 20;
+
+    // Logo
+    const logo = await carregarImagem("Logo.png");
+    if (logo) doc.addImage(logo, "PNG", margin, 10, 30, 20);
+
+    doc.setFontSize(14);
+    doc.text("FICHA DE MANUTENÇÃO", pageWidth / 2, 25, { align: "center" });
+    y = 40;
+
+    // Dados principais
+    doc.setFontSize(10);
+    doc.text(`Cliente: ${formData.cliente}`, margin, y);
+    y += lineHeight;
+    doc.text(`Cidade: ${formData.cidade}`, margin, y);
+    y += lineHeight;
+    doc.text(`Equipamento: ${formData.equipamento || formData.equipamentoOutro}`, margin, y);
+    y += lineHeight;
+    doc.text(`Nº de Série: ${formData.numeroSerie}`, margin, y);
+    y += lineHeight;
+    doc.text(`Serviço: ${formData.servico}`, margin, y);
+    y += lineHeight;
+    doc.text(`Data: ${formData.dataInicial} ${formData.horaInicial}  -  ${formData.dataFinal} ${formData.horaFinal}`, margin, y);
+    y += 10;
+
+    // Materiais Utilizados
+    if (materiais.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Materiais Utilizados:", margin, y);
+        y += 5;
+
+        const tabela = materiais.map(m => [m.codigo, m.descricao, m.quantidade.toString()]);
+        doc.autoTable({
+            startY: y,
+            head: [["Código", "Descrição", "Qtd"]],
+            body: tabela,
+            theme: "grid",
+            headStyles: { fillColor: [59, 130, 246] },
+            styles: { fontSize: 9 },
+            margin: { left: margin }
+        });
+
+        y = doc.lastAutoTable.finalY + 10;
+    }
+
+    // Assinaturas
+    if (assinaturas.cliente || assinaturas.tecnico) {
+        doc.setFontSize(12);
+        doc.text("Assinaturas:", margin, y);
+        y += 5;
+        if (assinaturas.cliente) {
+            const img = await carregarImagem(assinaturas.cliente);
+            doc.addImage(img, "PNG", margin, y, 60, 25);
+            doc.text("Cliente", margin + 20, y + 32);
+        }
+        if (assinaturas.tecnico) {
+            const img = await carregarImagem(assinaturas.tecnico);
+            doc.addImage(img, "PNG", margin + 90, y, 60, 25);
+            doc.text("Técnico", margin + 110, y + 32);
+        }
+        y += 40;
+    }
+
+    const nomeCliente = formData.cliente.replace(/[^a-zA-Z0-9]/g, "_");
+    const nomeArquivo = `Ficha_${nomeCliente}_${new Date().toISOString().split("T")[0]}.pdf`;
+    doc.save(nomeArquivo);
+}
+
+// ========== RELATÓRIO DE SERVIÇO ==========
+async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF("p", "mm", "a4");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const lineHeight = 7;
+    let y = 20;
+
+    // Logo
+    const logo = await carregarImagem("Logo.png");
+    if (logo) doc.addImage(logo, "PNG", margin, 10, 30, 20);
+
+    doc.setFontSize(14);
+    doc.text("RELATÓRIO DE PRESTAÇÃO DE SERVIÇO", pageWidth / 2, 25, { align: "center" });
+    y = 40;
+
+    doc.setFontSize(10);
+    doc.text(`Cliente: ${formData.cliente}`, margin, y);
+    y += lineHeight;
+    doc.text(`Técnico: ${formData.tecnicoNome}`, margin, y);
+    y += lineHeight;
+    doc.text(`Serviço: ${formData.servico}`, margin, y);
+    y += lineHeight;
+    doc.text(`Data: ${formData.dataInicial} ${formData.horaInicial}`, margin, y);
+    y += lineHeight;
+    doc.text(`Cidade: ${formData.cidade}`, margin, y);
+    y += 10;
+
+    doc.setFontSize(12);
+    doc.text("Relatório da Máquina:", margin, y);
+    y += 6;
+
+    doc.setFontSize(10);
+    const textLines = doc.splitTextToSize(formData.relatorioMaquina, pageWidth - margin * 2);
+    doc.text(textLines, margin, y);
+    y += textLines.length * 5 + 10;
+
+    // Fotos
+    if (fotos && fotos.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Fotos:", margin, y);
+        y += 5;
+
+        for (let i = 0; i < fotos.length; i++) {
+            const img = await carregarImagem(fotos[i].data);
+            const x = margin + (i % 2) * 90;
+            const yPos = y + Math.floor(i / 2) * 65;
+            doc.addImage(img, "JPEG", x, yPos, 80, 60);
+
+            // Quebra de página automática se ultrapassar
+            if (yPos + 70 > 270 && i < fotos.length - 1) {
+                doc.addPage();
+                y = 20;
+            }
+        }
+        y += Math.ceil(fotos.length / 2) * 65 + 10;
+    }
+
+    const nomeCliente = formData.cliente.replace(/[^a-zA-Z0-9]/g, "_");
+    const nomeArquivo = `Relatorio_${nomeCliente}_${new Date().toISOString().split("T")[0]}.pdf`;
+    doc.save(nomeArquivo);
+}
+
+// ========== FUNÇÃO AUXILIAR PARA CONVERTER IMAGENS ==========
+function carregarImagem(src) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = src;
+    });
+}
+
+// ======== CHAMAR AO EXPORTAR ========
+// Chamar dentro do exportData() (logo depois do download do JSON):
+// gerarPDFsAutomaticamente(formData, state.materiais, state.fotos, state.assinaturas);
+
+
+
 
         function exportData() {
             if (!validateForm()) return;
@@ -1096,6 +1499,7 @@ const estoqueData = [
             URL.revokeObjectURL(url);
             
             showNotification('Dados exportados com sucesso!', 'success');
+			gerarPDFsAutomaticamente(formData, state.materiais, state.fotos, state.assinaturas);
         }
 
         function showNotification(message, type) {
