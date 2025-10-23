@@ -16,8 +16,6 @@
 	<!-- jsPDF e AutoTable -->
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-
-	<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 	
 	<script src="https://cdn.jsdelivr.net/npm/idb@8/build/umd.js"></script>
 
@@ -166,15 +164,20 @@
                 </div>
                 <h1 class="text-xl font-bold text-gray-800">Formulário de Serviço</h1>
             </div>
-            <div class="flex items-center space-x-4">
-                <div id="status" class="flex items-center text-sm">
-                    <span id="status-indicator" class="status-indicator status-offline"></span>
-                    <span id="status-text">Offline</span>
-                </div>
-                <button id="export-btn" class="btn-primary px-4 py-2 rounded-lg flex items-center">
-                    <i class="fas fa-download mr-2"></i> Salvar
-                </button>
-            </div>
+<div class="flex items-center space-x-4">
+    <div id="status" class="flex items-center text-sm">
+        <span id="status-indicator" class="status-indicator status-offline"></span>
+        <span id="status-text">Offline</span>
+    </div>
+    <!-- Botão de Sincronização - NOVO -->
+    <button id="sync-btn" class="btn-primary px-4 py-2 rounded-lg flex items-center relative">
+        <i class="fas fa-sync-alt mr-2"></i> Sincronizar
+        <span id="sync-badge" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full text-xs w-5 h-5 flex items-center justify-center hidden">0</span>
+    </button>
+    <button id="export-btn" class="btn-primary px-4 py-2 rounded-lg flex items-center">
+        <i class="fas fa-download mr-2"></i> Salvar
+    </button>
+</div>
         </div>
     </header>
 
@@ -613,53 +616,6 @@ const estoqueData = [
     { codigo: '9747', material: 'PORCA PROT. BOTÃO REGISTRA' }
 ];
 
-	// ======== ADICIONAR NO INÍCIO DO SCRIPT (logo após as variáveis globais) ========
-
-// Verificar autenticação
-function checkAuth() {
-    const currentUser = sessionStorage.getItem('currentUser');
-    if (!currentUser) {
-        window.location.href = 'login.html';
-        return null;
-    }
-    return JSON.parse(currentUser);
-}
-
-// Executar verificação no início
-const currentUser = checkAuth();
-if (!currentUser) {
-    throw new Error('Usuário não autenticado');
-}
-
-// Exibir informações do usuário no header
-function updateUserInfo() {
-    const userInfoHTML = `
-        <div class="flex items-center space-x-3">
-            <div class="text-right">
-                <p class="text-sm font-semibold text-gray-800">${currentUser.nome}</p>
-                <p class="text-xs text-gray-500">ID: ${currentUser.id}</p>
-            </div>
-            <button id="logout-btn" class="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition">
-                <i class="fas fa-sign-out-alt"></i>
-            </button>
-        </div>
-    `;
-    
-    // Adicionar após o status no header
-    const statusDiv = document.getElementById('status').parentElement;
-    const userDiv = document.createElement('div');
-    userDiv.innerHTML = userInfoHTML;
-    statusDiv.appendChild(userDiv);
-    
-    // Event listener do logout
-    document.getElementById('logout-btn').addEventListener('click', function() {
-        if (confirm('Deseja realmente sair?')) {
-            sessionStorage.removeItem('currentUser');
-            window.location.href = 'login.html';
-        }
-    });
-}
-
         // Estado da aplicação
         let state = {
             fotos: [],
@@ -669,6 +625,24 @@ function updateUserInfo() {
                 tecnico: null
             }
         };
+
+		// ======== CONFIGURAÇÕES DE SINCRONIZAÇÃO ========
+const SYNC_CONFIG = {
+    endpoint: 'https://vps.pesoexato.com/servico_set',
+    chave: 'asdjhaskdjhasd',
+    interval: 5000, // 5 segundos
+    maxRetention: 24 * 60 * 60 * 1000 // 24 horas em milissegundos
+};
+
+// ======== ESTADO DA SINCRONIZAÇÃO ========
+let syncState = {
+    pendingCount: 0,
+    isSyncing: false,
+    syncInterval: null
+};
+
+// ======== ELEMENTOS DA INTERFACE ========
+let syncBtn, syncBadge, syncIcon;
 
         // Elementos DOM
         const statusIndicator = document.getElementById('status-indicator');
@@ -703,66 +677,10 @@ function updateUserInfo() {
         let lastXTecnico = 0;
         let lastYTecnico = 0;
 
-		let signaturePad;
-
-function initSignaturePad() {
-    const canvas = document.getElementById('signature-pad');
-    if (!canvas) return;
-
-    signaturePad = new SignaturePad(canvas, {
-        backgroundColor: 'rgb(255, 255, 255)',
-        penColor: 'rgb(0, 0, 0)',
-    });
-
-    // Redimensionar canvas automaticamente
-    function resizeCanvas() {
-        const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        canvas.width = canvas.offsetWidth * ratio;
-        canvas.height = canvas.offsetHeight * ratio;
-        canvas.getContext('2d').scale(ratio, ratio);
-        signaturePad.clear();
-    }
-
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-}
-
-function clearSignature() {
-    if (signaturePad) signaturePad.clear();
-}
-
-document.addEventListener('DOMContentLoaded', initSignaturePad);
-
-
         // Inicialização
         document.addEventListener('DOMContentLoaded', function() {
             initApp();
         });
-
-        function initApp() {
-            updateOnlineStatus();
-            window.addEventListener('online', updateOnlineStatus);
-            window.addEventListener('offline', updateOnlineStatus);
-
-            setupEventListeners();
-            setupSignatureCanvas(canvasCliente, ctxCliente, 'cliente');
-            setupSignatureCanvas(canvasTecnico, ctxTecnico, 'tecnico');
-            populateMaterialsDatalist();
-
-    updateUserInfo();
-
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js?v=10')
-                .then(reg => {
-                    console.log('Service Worker registrado com sucesso.');
-                })
-                .catch(error => {
-                    console.error('Falha no registro do Service Worker:', error);
-                });
-        });
-    }
-}
 
         function updateOnlineStatus() {
             if (navigator.onLine) {
@@ -1177,38 +1095,44 @@ const FIELD_ID_MAP = {
 };
 
 // ======== CONFIGURAÇÃO DO INDEXEDDB ========
-const DB_NAME_FORM = 'FormulariosDB';
-const DB_VERSION_FORM = 2;
-const STORE_FORMULARIOS = 'formularios';
-const STORE_USUARIOS = 'usuarios';
-const STORE_SEQUENCES = 'sequences';
-
+const DB_NAME = 'FormulariosDB';
+const DB_VERSION = 2;
+const STORE_NAME = 'formularios';
 
 let dbPromise;
 
 // Inicializa a conexão com o IndexedDB
 function initDB() {
-  if (dbPromise) return dbPromise;
-  dbPromise = idb.openDB(DB_NAME_FORM, DB_VERSION_FORM, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains(STORE_FORMULARIOS)) {
-        const s = db.createObjectStore(STORE_FORMULARIOS, { keyPath: 'id' });
-        s.createIndex('cliente', 'cliente');
-        s.createIndex('servico', 'servico');
-        s.createIndex('userId', 'userId');
-        s.createIndex('fichaId', 'fichaId');
-      }
-      if (!db.objectStoreNames.contains(STORE_USUARIOS)) {
-        const u = db.createObjectStore(STORE_USUARIOS, { keyPath: 'id' });
-        u.createIndex('nome', 'nome');
-      }
-      if (!db.objectStoreNames.contains(STORE_SEQUENCES)) {
-        db.createObjectStore(STORE_SEQUENCES, { keyPath: 'userId' });
-      }
-    }
-  });
-  return dbPromise;
+    if (dbPromise) return dbPromise;
+
+    dbPromise = idb.openDB(DB_NAME, DB_VERSION, {
+        upgrade(db, oldVersion) {
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                store.createIndex('cliente', 'cliente', { unique: false });
+                store.createIndex('servico', 'servico', { unique: false });
+                store.createIndex('sincronizado', 'sincronizado', { unique: false });
+            }
+            
+            // Migração: adicionar campos de sincronização se necessário
+            if (oldVersion < 2) {
+                const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
+                return store.getAll().then(forms => {
+                    return Promise.all(
+                        forms.map(form => {
+                            if (form.sincronizado === undefined) {
+                                form.sincronizado = false;
+                                return store.put(form);
+                            }
+                        })
+                    );
+                });
+            }
+        },
+    });
+    return dbPromise;
 }
+
 
 // Função auxiliar para remover registros mais antigos que 24h
 async function limparRegistrosAntigos(db) {
@@ -1235,56 +1159,55 @@ async function limparRegistrosAntigos(db) {
     }
 }
 
-async function getNextSequence(userId) {
-  const db = await initDB();
-  const tx = db.transaction(STORE_SEQUENCES, 'readwrite');
-  const store = tx.objectStore(STORE_SEQUENCES);
-  const record = (await store.get(userId)) || { userId, last: 0 };
-  record.last++;
-  await store.put(record);
-  await tx.done;
-  return record.last;
-}
-
-function formatFichaId(userId, seq) {
-  const prefix = typeof userId === 'number' ? String(userId).padStart(2, '0') : 'U';
-  return `${prefix}-${String(seq).padStart(3, '0')}`;
-}
-		
 // Salva o formulário no IndexedDB
 async function salvarFormularioLocal() {
-    if (!validateForm()) return;
-    const f = collectFormData();
+    // Estas funções precisam estar definidas no seu escopo global
+    // if (!validateForm()) return; 
+    // const f = collectFormData(); 
 
-    // Gerar ID da ficha
-    const sequence = await getNextSequence(currentUser.id);
-    const fichaId = formatFichaId(currentUser.id, sequence);
+    // **ASSUME-SE** que `validateForm()` e `collectFormData()` existem e são síncronas.
+    if (!validateForm()) return;
+    const f = collectFormData(); 
 
     const id = Date.now();
 
     const registro = {
-        id: id,
-        fichaId: fichaId, // NOVO CAMPO
-        userId: currentUser.id, // NOVO CAMPO
-        userName: currentUser.nome, // NOVO CAMPO
+        id: id, 
         createdAt: new Date().toISOString(),
         cliente: f.cliente || '',
         servico: f.servico || '',
         formData: f,
-        fotos: state.fotos || [],
+        // Incluímos fotos e assinaturas.
+        fotos: state.fotos || [], 
         materiais: state.materiais || [],
-        assinaturas: state.assinaturas || {}
+        assinaturas: state.assinaturas || {},
+		sincronizado: false,
+		syncedAt: null
     };
 
     try {
         const db = await initDB();
-        await db.put(STORE_FORMULARIOS, registro);
+        
+        // 1. Salva o novo registro no IndexedDB
+        // O método .put() insere ou atualiza um objeto
+        await db.put(STORE_NAME, registro);
 
-        showNotification(`Formulário salvo! ID: ${fichaId}`, 'success');
+		// Atualizar contagem de pendentes
+await updatePendingCount();
+
+// Tentar sincronizar automaticamente se online
+if (navigator.onLine) {
+    setTimeout(() => attemptSync(), 1000);
+}
+
+        showNotification('Formulário salvo localmente!', 'success');
+        
+        // 2. Renderiza a UI e garante a limpeza
         await renderFormulariosSalvos();
     } catch (e) {
         console.error("Erro ao salvar no IndexedDB:", e);
-        showNotification('Erro ao salvar no armazenamento local.', 'error');
+        // QuotaExceededError pode acontecer até no IndexedDB, mas é raro
+        showNotification('Erro: Falha ao salvar no armazenamento local. Verifique a cota.', 'error');
     }
 }
 
@@ -1297,64 +1220,82 @@ async function renderFormulariosSalvos() {
         container = document.createElement('section');
         container.id = containerId;
         container.className = 'form-section';
+        // ASSUME-SE que document.querySelector('main') existe
         const main = document.querySelector('main');
         if (main) {
             main.appendChild(container);
+        } else {
+            console.error("Elemento 'main' não encontrado. Não é possível renderizar a seção de salvos.");
+            return;
         }
     }
+	
+	
 
-    container.innerHTML = `
-        <h2 class="text-xl font-semibold flex items-center">
-            <i class="fas fa-history text-blue-600 mr-2"></i> Formulários Salvos
-        </h2>
-        <div id="lista-formularios" class="space-y-2"></div>
-    `;
+    // Estrutura HTML
+container.innerHTML = `
+    <h2 class="text-xl font-semibold flex items-center">
+        <i class="fas fa-history text-blue-600 mr-2"></i> Formulários Salvos
+        <span class="ml-2 text-sm bg-gray-200 text-gray-700 px-2 py-1 rounded-full">
+            ${syncState.pendingCount} pendente(s)
+        </span>
+    </h2>
+    <div id="lista-formularios" class="space-y-2"></div>
+`;
 
     const lista = container.querySelector('#lista-formularios');
 
     try {
         const db = await initDB();
+
+        // Faz a limpeza antes de ler a lista
         await limparRegistrosAntigos(db);
 
-        let registros = await db.getAll(STORE_FORMULARIOS);
+        // Obtém todos os registros do IndexedDB
+        let registros = await db.getAll(STORE_NAME);
         
-        // Filtrar por usuário atual
-        registros = registros.filter(r => r.userId === currentUser.id);
-        registros.sort((a, b) => b.id - a.id);
+        // Ordenar pelo ID (mais novo primeiro)
+        registros.sort((a, b) => b.id - a.id); 
 
         if (registros.length === 0) {
-            lista.innerHTML = `<p class="text-gray-500 text-sm">Nenhum formulário salvo.</p>`;
+            lista.innerHTML = `<p class="text-gray-500 text-sm">Nenhum formulário salvo nas últimas 24h.</p>`;
             return;
         }
 
-        registros.forEach(registro => {
-            const dataLegivel = new Date(registro.id).toLocaleString();
-            const item = document.createElement('div');
-            item.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-lg shadow-sm';
-            item.innerHTML = `
-                <div>
-                    <div class="flex items-center gap-2">
-                        <span class="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded">${registro.fichaId || 'S/ID'}</span>
-                        <span class="font-medium text-gray-800">${registro.cliente || '—'}</span>
-                    </div>
-                    <div class="text-sm text-gray-500 mt-1">${registro.servico || '—'} • ${dataLegivel}</div>
-                </div>
-                <div class="flex space-x-2">
-                    <button class="btn-secondary px-3 py-1 rounded edit-btn" data-id="${registro.id}">
-                        <i class="fas fa-edit"></i> Editar
-                    </button>
-                    <button class="btn-secondary px-3 py-1 rounded text-red-600 delete-btn" data-id="${registro.id}">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            `;
-            lista.appendChild(item);
-        });
+        // Renderiza os itens na lista
+registros.forEach(registro => {
+    const dataLegivel = new Date(registro.id).toLocaleString();
+    const statusIcon = registro.sincronizado 
+        ? '<i class="fas fa-check-circle text-green-500" title="Sincronizado"></i>'
+        : '<i class="fas fa-clock text-yellow-500" title="Pendente de sincronização"></i>';
+    
+    const item = document.createElement('div');
+    item.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-lg shadow-sm';
+    item.innerHTML = `
+        <div class="flex items-center">
+            ${statusIcon}
+            <div class="ml-2">
+                <div class="font-medium text-gray-800">${registro.cliente || '—'}</div>
+                <div class="text-sm text-gray-500">${registro.servico || '—'} • ${dataLegivel}</div>
+            </div>
+        </div>
+        <div class="flex space-x-2">
+            <button class="btn-secondary px-3 py-1 rounded edit-btn" data-id="${registro.id}">
+                <i class="fas fa-edit"></i> Editar
+            </button>
+            <button class="btn-secondary px-3 py-1 rounded text-red-600 delete-btn" data-id="${registro.id}">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `;
+    lista.appendChild(item);
+});
 
+        // Delegação dos eventos - DEVE SER FEITA APÓS INSERIR OS ITENS NA LISTA
         lista.querySelectorAll('.edit-btn').forEach(btn => {
             btn.addEventListener('click', e => {
                 const id = e.currentTarget.dataset.id;
-                carregarFormularioLocal(id);
+                carregarFormularioLocal(id); 
             });
         });
 
@@ -1366,8 +1307,8 @@ async function renderFormulariosSalvos() {
         });
 
     } catch (e) {
-        console.error("Erro ao renderizar formulários:", e);
-        lista.innerHTML = `<p class="text-red-500 text-sm">Erro ao carregar lista.</p>`;
+        console.error("Erro fatal ao renderizar formulários do IndexedDB:", e);
+        lista.innerHTML = `<p class="text-red-500 text-sm">Erro ao carregar lista de formulários. (Verifique a console.)</p>`;
     }
 }
 
@@ -1376,7 +1317,7 @@ async function carregarFormularioLocal(id) {
     try {
         const db = await initDB();
         // 'get' busca um registro pela chave primária (id)
-        const registro = await db.get(STORE_FORMULARIOS, Number(id));
+        const registro = await db.get(STORE_NAME, Number(id)); 
 
         if (!registro) {
             showNotification('Registro não encontrado', 'error');
@@ -1437,7 +1378,7 @@ async function removerFormularioLocal(id) {
     try {
         const db = await initDB();
         // 'delete' remove o registro pela chave primária (id)
-        await db.delete(STORE_FORMULARIOS, Number(id));
+        await db.delete(STORE_NAME, Number(id));
 
         showNotification('Formulário excluído.', 'info');
         await renderFormulariosSalvos(); // Renderiza a UI após a exclusão
@@ -1476,57 +1417,79 @@ function drawDataUrlOnCanvas(dataUrl, canvas, ctx) {
 // =======================================================
 
 async function startApp() {
-  await initDB();
-  // (definições de função já carregadas)
-  renderFormulariosSalvos();
-  setupEventListeners(); // aqui adiciona exportBtn listener etc.
-  updateUserInfo();
+    try {
+        // Inicializar banco de dados
+        await initDB();
+        
+        // Inicializar sistema de sincronização
+        initSync();
+        
+        // Renderizar formulários salvos
+        await renderFormulariosSalvos();
+        
+        // Configurações de status online/offline
+        updateOnlineStatus();
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
 
-	function atualizarStatusConexao() {
-    const statusDiv = document.getElementById('status');
-    if (!statusDiv) return;
+        // Configurar event listeners
+        setupEventListeners();
+        
+        // Configurar canvas de assinatura
+        setupSignatureCanvas(canvasCliente, ctxCliente, 'cliente');
+        setupSignatureCanvas(canvasTecnico, ctxTecnico, 'tecnico');
+        
+        // Popular lista de materiais
+        populateMaterialsDatalist();
 
-    if (navigator.onLine) {
-        statusDiv.textContent = "Online";
-        statusDiv.classList.remove('bg-red-500');
-        statusDiv.classList.add('bg-green-500');
-    } else {
-        statusDiv.textContent = "Offline";
-        statusDiv.classList.remove('bg-green-500');
-        statusDiv.classList.add('bg-red-500');
+        // Registrar Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js?v=15')
+                    .then(reg => {
+                        console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
+                    })
+                    .catch(error => {
+                        console.error('Falha no registro do Service Worker:', error);
+                    });
+            });
+        }
+        
+    } catch (error) {
+        console.error("Falha ao iniciar a aplicação:", error);
+        // Exibir uma mensagem de erro na UI se a inicialização falhar
+        const main = document.querySelector('main');
+        if (main) {
+            main.innerHTML += '<p class="text-red-600 p-4">Erro Crítico: Não foi possível inicializar o armazenamento local (IndexedDB). A função de salvar não funcionará.</p>';
+        }
     }
 }
 
-window.addEventListener('online', atualizarStatusConexao);
-window.addEventListener('offline', atualizarStatusConexao);
-
-document.addEventListener('DOMContentLoaded', () => {
-    atualizarStatusConexao(); // mostra o status inicial
-});
-}
+// Substitui o listener antigo: Inicia a aplicação após o DOM carregar
 document.addEventListener('DOMContentLoaded', startApp);
 
 // O listener do botão de exportação (MANTIDO)
 // ASSUME-SE que 'exportBtn' está definido globalmente
-exportBtn.addEventListener('click', async function(e) {
-    await salvarFormularioLocal();
+exportBtn.addEventListener('click', function(e) {
+    // salvar local antes de exportar
+    salvarFormularioLocal();
     // continue com a rotina existente de export...
 });
 
 // ======== GERADOR DE PDF (FORMATAÇÃO ORIGINAL DO GERADOR PDF.html) ========
 
 // Garante que o jsPDF foi carregado antes de gerar
-async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas, fichaId) {
+async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas) {
     if (!window.jspdf || !window.jspdf.jsPDF) {
         console.warn("jsPDF ainda não carregado, adiando geração...");
-        setTimeout(() => gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas, fichaId), 500);
+        setTimeout(() => gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas), 500);
         return;
     }
 
     try {
-        await gerarFichaPDF(formData, materiais, fotos, assinaturas, fichaId);
-        await gerarRelatorioPDF(formData, materiais, fotos, assinaturas, fichaId);
-        showNotification(`PDFs gerados! ID: ${fichaId}`, "success");
+        await gerarFichaPDF(formData, materiais, fotos, assinaturas);
+        await gerarRelatorioPDF(formData, materiais, fotos, assinaturas);
+        showNotification("PDFs gerados com sucesso!", "success");
     } catch (e) {
         console.error("Erro ao gerar PDFs:", e);
         showNotification("Erro ao gerar PDFs", "error");
@@ -1544,28 +1507,25 @@ function formatDate(dateString) {
 }
 
 // ======== FICHA DE MANUTENÇÃO ========
-async function gerarFichaPDF(formData, materiais, fotos, assinaturas, fichaId) {
+async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF("p", "mm", "a4");
     const logo = await carregarImagem("Logo.png");
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     let y = 20;
 
     // Logo e cabeçalho
     doc.setFillColor(0, 82, 163);
     doc.rect(0, 0, pageWidth, 17, 'F');
-    
+	
     if (logo) doc.addImage(logo, "PNG", 10, 1.5, 30, 15);
     
+
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('FICHA DE MANUTENÇÃO', pageWidth / 2, 11, { align: 'center' });
-    
-    // ADICIONAR ID DA FICHA
-    doc.setFontSize(10);
-    doc.text(`ID: ${fichaId || 'N/A'}`, pageWidth - 10, 11, { align: 'right' });
-    
     y = 22;
 
     const tableStyles4Col = {
@@ -1959,52 +1919,46 @@ function carregarImagem(src) {
 
 
 
-        async function exportData() {
-    if (!validateForm()) return;
+        function exportData() {
+            if (!validateForm()) return;
 
-    const formData = collectFormData();
-    
-    // Gerar ID da ficha
-    const sequence = await getNextSequence(currentUser.id);
-    const fichaId = formatFichaId(currentUser.id, sequence);
-    
-    const dataToExport = {
-        fichaId: fichaId,
-        userId: currentUser.id,
-        userName: currentUser.nome,
-        formData: formData,
-        fotos: state.fotos,
-        materiais: state.materiais,
-        assinaturas: state.assinaturas,
-        exportTimestamp: new Date().toISOString(),
-        version: '1.0'
-    };
-    
-    const dataStr = JSON.stringify(dataToExport, null, 2);
-    const dataBlob = new Blob([dataStr], {type: 'application/json'});
-    
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    
-    const cliente = formData.cliente.replace(/[^a-zA-Z0-9]/g, '_');
-    link.download = `servico_${fichaId}_${cliente}.json`;
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    showNotification(`Dados exportados! ID: ${fichaId}`, 'success');
-    
-    setTimeout(() => {
-        try {
-            gerarPDFsAutomaticamente(formData, state.materiais, state.fotos, state.assinaturas, fichaId);
-        } catch (err) {
-            console.error('Erro ao gerar PDFs:', err);
+            const formData = collectFormData();
+            
+            const dataToExport = {
+                formData: formData,
+                fotos: state.fotos,
+                materiais: state.materiais,
+                assinaturas: state.assinaturas,
+                exportTimestamp: new Date().toISOString(),
+                version: '1.0'
+            };
+            
+            const dataStr = JSON.stringify(dataToExport, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            
+            // Nome do arquivo com data e cliente
+            const cliente = formData.cliente.replace(/[^a-zA-Z0-9]/g, '_');
+            const data = new Date().toISOString().split('T')[0];
+            link.download = `servico_${cliente}_${data}.json`;
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            showNotification('Dados exportados com sucesso!', 'success');
+			setTimeout(() => {
+				try {
+					gerarPDFsAutomaticamente(formData, state.materiais, state.fotos, state.assinaturas);
+				} catch (err) {
+					console.error('Erro ao gerar PDFs:', err);
+				}
+			}, 500);
         }
-    }, 500);
-}
 
         function showNotification(message, type) {
             notification.className = `notification ${type}`;
@@ -2019,6 +1973,251 @@ function carregarImagem(src) {
                 notification.style.display = 'none';
             }, 5000);
         }
+
+		// ======== INICIALIZAÇÃO DA SINCRONIZAÇÃO ========
+function initSync() {
+    // Obter referências aos elementos
+    syncBtn = document.getElementById('sync-btn');
+    syncBadge = document.getElementById('sync-badge');
+    syncIcon = syncBtn.querySelector('i');
+    
+    // Adicionar evento de clique
+    syncBtn.addEventListener('click', manualSync);
+    
+    // Iniciar verificação de sincronização
+    startSyncInterval();
+    
+    // Atualizar contagem inicial
+    updatePendingCount();
+    
+    // Verificar sincronização quando ficar online
+    window.addEventListener('online', handleOnlineStatus);
+    window.addEventListener('offline', handleOfflineStatus);
+}
+
+// ======== GERENCIAMENTO DO ESTADO ONLINE/OFFLINE ========
+function handleOnlineStatus() {
+    showNotification('Conexão restaurada - Sincronizando...', 'success');
+    startSyncInterval();
+    attemptSync();
+}
+
+function handleOfflineStatus() {
+    showNotification('Sem conexão - Sincronização pausada', 'error');
+    stopSyncInterval();
+    updateSyncButtonState(false);
+}
+
+// ======== CONTROLE DO INTERVALO DE SINCRONIZAÇÃO ========
+function startSyncInterval() {
+    if (!navigator.onLine) return;
+    
+    stopSyncInterval(); // Garantir que não há intervalos duplicados
+    
+    syncState.syncInterval = setInterval(() => {
+        if (navigator.onLine && !syncState.isSyncing) {
+            attemptSync();
+        }
+    }, SYNC_CONFIG.interval);
+}
+
+function stopSyncInterval() {
+    if (syncState.syncInterval) {
+        clearInterval(syncState.syncInterval);
+        syncState.syncInterval = null;
+    }
+}
+
+// ======== SINCRONIZAÇÃO MANUAL ========
+async function manualSync() {
+    if (!navigator.onLine) {
+        showNotification('Sem conexão para sincronizar', 'error');
+        return;
+    }
+    
+    if (syncState.isSyncing) {
+        showNotification('Sincronização já em andamento', 'info');
+        return;
+    }
+    
+    showNotification('Iniciando sincronização manual...', 'info');
+    await attemptSync(true);
+}
+
+// ======== SINCRONIZAÇÃO AUTOMÁTICA ========
+async function attemptSync(isManual = false) {
+    if (syncState.isSyncing) return;
+    
+    try {
+        syncState.isSyncing = true;
+        updateSyncButtonState(true);
+        
+        const pendingForms = await getPendingForms();
+        
+        if (pendingForms.length === 0) {
+            if (isManual) {
+                showNotification('Nenhum formulário pendente para sincronizar', 'info');
+            }
+            return;
+        }
+        
+        if (isManual) {
+            showNotification(`Sincronizando ${pendingForms.length} formulário(s)...`, 'info');
+        }
+        
+        let successCount = 0;
+        let errorCount = 0;
+        
+        // Sincronizar cada formulário pendente
+        for (const form of pendingForms) {
+            try {
+                const success = await syncSingleForm(form);
+                if (success) {
+                    successCount++;
+                    
+                    // Marcar como sincronizado no IndexedDB
+                    await markFormAsSynced(form.id);
+                    
+                    // Pequeno delay entre sincronizações
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } else {
+                    errorCount++;
+                }
+            } catch (error) {
+                console.error(`Erro ao sincronizar formulário ${form.id}:`, error);
+                errorCount++;
+            }
+        }
+        
+        // Atualizar interface
+        await updatePendingCount();
+        await renderFormulariosSalvos();
+        
+        if (isManual || successCount > 0) {
+            const message = successCount > 0 
+                ? `${successCount} formulário(s) sincronizado(s) com sucesso${errorCount > 0 ? `, ${errorCount} falha(s)` : ''}`
+                : 'Falha na sincronização';
+                
+            showNotification(message, successCount > 0 ? 'success' : 'error');
+        }
+        
+    } catch (error) {
+        console.error('Erro geral na sincronização:', error);
+        if (isManual) {
+            showNotification('Erro na sincronização', 'error');
+        }
+    } finally {
+        syncState.isSyncing = false;
+        updateSyncButtonState(false);
+    }
+}
+
+// ======== SINCRONIZAÇÃO INDIVIDUAL DE FORMULÁRIO ========
+async function syncSingleForm(form) {
+    try {
+        const payload = {
+            json_dados: {
+                id: form.id,
+                createdAt: form.createdAt,
+                cliente: form.cliente,
+                servico: form.servico,
+                formData: form.formData,
+                materiais: form.materiais,
+                // Nota: Fotos e assinaturas são dados grandes, 
+                // pode ser necessário tratamento especial
+                hasFotos: form.fotos && form.fotos.length > 0,
+                hasAssinaturas: form.assinaturas && 
+                    (form.assinaturas.cliente || form.assinaturas.tecnico)
+            },
+            chave: SYNC_CONFIG.chave
+        };
+        
+        const response = await fetch(SYNC_CONFIG.endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('Formulário sincronizado:', form.id, result);
+        
+        return true;
+    } catch (error) {
+        console.error('Erro ao sincronizar formulário:', error);
+        return false;
+    }
+}
+
+// ======== FUNÇÕES AUXILIARES DO INDEXEDDB ========
+async function getPendingForms() {
+    try {
+        const db = await initDB();
+        const allForms = await db.getAll(STORE_NAME);
+        
+        // Filtrar formulários não sincronizados e dentro do período de retenção
+        const cutoffTime = Date.now() - SYNC_CONFIG.maxRetention;
+        const pendingForms = allForms.filter(form => 
+            !form.sincronizado && form.id > cutoffTime
+        );
+        
+        return pendingForms;
+    } catch (error) {
+        console.error('Erro ao buscar formulários pendentes:', error);
+        return [];
+    }
+}
+
+async function markFormAsSynced(formId) {
+    try {
+        const db = await initDB();
+        const form = await db.get(STORE_NAME, formId);
+        
+        if (form) {
+            form.sincronizado = true;
+            form.syncedAt = new Date().toISOString();
+            await db.put(STORE_NAME, form);
+        }
+    } catch (error) {
+        console.error('Erro ao marcar formulário como sincronizado:', error);
+    }
+}
+
+async function updatePendingCount() {
+    try {
+        const pendingForms = await getPendingForms();
+        syncState.pendingCount = pendingForms.length;
+        updateSyncBadge();
+    } catch (error) {
+        console.error('Erro ao atualizar contagem pendente:', error);
+    }
+}
+
+function updateSyncBadge() {
+    if (syncState.pendingCount > 0) {
+        syncBadge.textContent = syncState.pendingCount;
+        syncBadge.classList.remove('hidden');
+    } else {
+        syncBadge.classList.add('hidden');
+    }
+}
+
+function updateSyncButtonState(syncing) {
+    if (syncing) {
+        syncIcon.classList.add('fa-spin');
+        syncBtn.disabled = true;
+        syncBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        syncIcon.classList.remove('fa-spin');
+        syncBtn.disabled = false;
+        syncBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+}
     </script>
 </body>
 </html>
