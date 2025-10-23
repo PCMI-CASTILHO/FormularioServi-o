@@ -16,6 +16,8 @@
 	<!-- jsPDF e AutoTable -->
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+	<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 	
 	<script src="https://cdn.jsdelivr.net/npm/idb@8/build/umd.js"></script>
 
@@ -700,6 +702,37 @@ function updateUserInfo() {
         let lastYCliente = 0;
         let lastXTecnico = 0;
         let lastYTecnico = 0;
+
+		let signaturePad;
+
+function initSignaturePad() {
+    const canvas = document.getElementById('signature-pad');
+    if (!canvas) return;
+
+    signaturePad = new SignaturePad(canvas, {
+        backgroundColor: 'rgb(255, 255, 255)',
+        penColor: 'rgb(0, 0, 0)',
+    });
+
+    // Redimensionar canvas automaticamente
+    function resizeCanvas() {
+        const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        canvas.width = canvas.offsetWidth * ratio;
+        canvas.height = canvas.offsetHeight * ratio;
+        canvas.getContext('2d').scale(ratio, ratio);
+        signaturePad.clear();
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+}
+
+function clearSignature() {
+    if (signaturePad) signaturePad.clear();
+}
+
+document.addEventListener('DOMContentLoaded', initSignaturePad);
+
 
         // Inicialização
         document.addEventListener('DOMContentLoaded', function() {
@@ -1448,6 +1481,28 @@ async function startApp() {
   renderFormulariosSalvos();
   setupEventListeners(); // aqui adiciona exportBtn listener etc.
   updateUserInfo();
+
+	function atualizarStatusConexao() {
+    const statusDiv = document.getElementById('status');
+    if (!statusDiv) return;
+
+    if (navigator.onLine) {
+        statusDiv.textContent = "Online";
+        statusDiv.classList.remove('bg-red-500');
+        statusDiv.classList.add('bg-green-500');
+    } else {
+        statusDiv.textContent = "Offline";
+        statusDiv.classList.remove('bg-green-500');
+        statusDiv.classList.add('bg-red-500');
+    }
+}
+
+window.addEventListener('online', atualizarStatusConexao);
+window.addEventListener('offline', atualizarStatusConexao);
+
+document.addEventListener('DOMContentLoaded', () => {
+    atualizarStatusConexao(); // mostra o status inicial
+});
 }
 document.addEventListener('DOMContentLoaded', startApp);
 
