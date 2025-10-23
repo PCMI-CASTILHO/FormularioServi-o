@@ -683,11 +683,6 @@ let syncBtn, syncBadge, syncIcon;
         let lastXTecnico = 0;
         let lastYTecnico = 0;
 
-        // Inicialização
-        document.addEventListener('DOMContentLoaded', function() {
-            initApp();
-        });
-
         function updateOnlineStatus() {
             if (navigator.onLine) {
                 statusIndicator.className = 'status-indicator status-online';
@@ -723,6 +718,10 @@ let syncBtn, syncBadge, syncIcon;
                     imageModal.style.display = 'none';
                 }
             });
+
+			if (document.getElementById('sync-btn')) {
+    document.getElementById('sync-btn').addEventListener('click', manualSync);
+}
         }
 
         function setupSignatureCanvas(canvas, ctx, tipo) {
@@ -1996,9 +1995,6 @@ function initSync() {
     syncBtn = document.getElementById('sync-btn');
     syncBadge = document.getElementById('sync-badge');
     syncIcon = syncBtn.querySelector('i');
-    
-    // Adicionar evento de clique
-    syncBtn.addEventListener('click', manualSync);
     
     // Iniciar verificação de sincronização
     startSyncInterval();
