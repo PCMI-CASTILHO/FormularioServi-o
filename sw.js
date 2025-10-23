@@ -1,5 +1,5 @@
 // Nome do cache — altere o número sempre que mudar algo
-const CACHE_NAME = 'formulario-cache-v18';
+const CACHE_NAME = 'formulario-cache-v20';
 
 // Instala o service worker
 self.addEventListener('install', event => {
