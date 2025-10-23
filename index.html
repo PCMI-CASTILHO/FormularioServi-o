@@ -1144,10 +1144,10 @@ const FIELD_ID_MAP = {
 };
 
 // ======== CONFIGURAÇÃO DO INDEXEDDB ========
-const DB_NAME = 'FormulariosDB';
+const DB_NAME_FORM = 'FormulariosDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'formularios';
-const DB_VERSION = 2;
+const DB_VERSION_FORM = 2;
 const STORE_FORMULARIOS = 'formularios';
 const STORE_USUARIOS = 'usuarios';
 
@@ -1157,7 +1157,7 @@ let dbPromise;
 function initDB() {
     if (dbPromise) return dbPromise;
 
-    dbPromise = idb.openDB(DB_NAME, DB_VERSION, {
+    dbPromise = idb.openDB(DB_NAME_FORM, DB_VERSION_FORM, {
         upgrade(db, oldVersion, newVersion, transaction) {
             // Store de formulários
             if (!db.objectStoreNames.contains(STORE_FORMULARIOS)) {
