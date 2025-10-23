@@ -1213,7 +1213,7 @@ async function getNextSequence(userId) {
         const newVersion = db.version + 1;
         db.close();
         await new Promise((resolve, reject) => {
-            const req = indexedDB.open(DB_NAME_FORM, newVersion);
+            const req = indexedDB.open(STORE_NAME_FORM, newVersion);
             req.onupgradeneeded = (event) => {
                 const dbUpgrade = event.target.result;
                 if (!dbUpgrade.objectStoreNames.contains(STORE_SEQUENCES)) {
