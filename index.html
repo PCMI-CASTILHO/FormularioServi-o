@@ -1144,9 +1144,7 @@ const FIELD_ID_MAP = {
 };
 
 // ======== CONFIGURAÇÃO DO INDEXEDDB ========
-const DB_NAME_FORM = 'FormulariosDB';
-const DB_VERSION = 1;
-const STORE_NAME = 'formularios';
+const STORE_NAME_FORM = 'formularios';
 const DB_VERSION_FORM = 2;
 const STORE_FORMULARIOS = 'formularios';
 const STORE_USUARIOS = 'usuarios';
@@ -1157,7 +1155,7 @@ let dbPromise;
 function initDB() {
     if (dbPromise) return dbPromise;
 
-    dbPromise = idb.openDB(DB_NAME_FORM, DB_VERSION_FORM, {
+    dbPromise = idb.openDB(STORE_NAME_FORM, DB_VERSION_FORM, {
         upgrade(db, oldVersion, newVersion, transaction) {
             // Store de formulários
             if (!db.objectStoreNames.contains(STORE_FORMULARIOS)) {
@@ -1204,6 +1202,47 @@ async function limparRegistrosAntigos(db) {
     }
 }
 
+async function getNextSequence(userId) {
+    const db = await initDB();
+
+    // Tabela (store) de controle de sequência
+    const STORE_SEQUENCES = 'sequences';
+
+    // Cria store se não existir
+    if (!db.objectStoreNames.contains(STORE_SEQUENCES)) {
+        const newVersion = db.version + 1;
+        db.close();
+        await new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME_FORM, newVersion);
+            req.onupgradeneeded = (event) => {
+                const dbUpgrade = event.target.result;
+                if (!dbUpgrade.objectStoreNames.contains(STORE_SEQUENCES)) {
+                    dbUpgrade.createObjectStore(STORE_SEQUENCES, { keyPath: 'userId' });
+                }
+            };
+            req.onsuccess = () => resolve();
+            req.onerror = reject;
+        });
+        return await getNextSequence(userId);
+    }
+
+    const tx = db.transaction(STORE_SEQUENCES, 'readwrite');
+    const store = tx.objectStore(STORE_SEQUENCES);
+
+    const record = (await store.get(userId)) || { userId, last: 0 };
+    record.last++;
+    await store.put(record);
+
+    await tx.done;
+    return record.last;
+}
+
+// Formata o número de ficha (ex: “T001” ou “U002”)
+function formatFichaId(userId, seq) {
+    const prefix = typeof userId === 'number' ? String(userId).padStart(2, '0') : 'U';
+    return `${prefix}-${String(seq).padStart(3, '0')}`;
+}
+		
 // Salva o formulário no IndexedDB
 async function salvarFormularioLocal() {
     if (!validateForm()) return;
@@ -1329,7 +1368,7 @@ async function carregarFormularioLocal(id) {
     try {
         const db = await initDB();
         // 'get' busca um registro pela chave primária (id)
-        const registro = await db.get(STORE_NAME, Number(id)); 
+        const registro = await db.get(STORE_NAME_FORM, Number(id)); 
 
         if (!registro) {
             showNotification('Registro não encontrado', 'error');
@@ -1390,7 +1429,7 @@ async function removerFormularioLocal(id) {
     try {
         const db = await initDB();
         // 'delete' remove o registro pela chave primária (id)
-        await db.delete(STORE_NAME, Number(id));
+        await db.delete(STORE_NAME_FORM, Number(id));
 
         showNotification('Formulário excluído.', 'info');
         await renderFormulariosSalvos(); // Renderiza a UI após a exclusão
