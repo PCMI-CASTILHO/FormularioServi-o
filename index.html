@@ -629,10 +629,16 @@ const estoqueData = [
 		// ======== CONFIGURAÇÕES DE SINCRONIZAÇÃO ========
 const SYNC_CONFIG = {
     endpoint: 'https://vps.pesoexato.com/servico_set',
-    chave: 'asdjhaskdjhasd',
     interval: 5000, // 5 segundos
     maxRetention: 24 * 60 * 60 * 1000 // 24 horas em milissegundos
 };
+
+		// ======== FUNÇÃO PARA GERAR CHAVE ÚNICA ========
+function generateUniqueKey() {
+    const timestamp = Date.now().toString(36);
+    const randomStr = Math.random().toString(36).substr(2, 9);
+    return `form_${timestamp}_${randomStr}`;
+}
 
 // ======== ESTADO DA SINCRONIZAÇÃO ========
 let syncState = {
@@ -1096,7 +1102,7 @@ const FIELD_ID_MAP = {
 
 // ======== CONFIGURAÇÃO DO INDEXEDDB ========
 const DB_NAME = 'FormulariosDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = 'formularios';
 
 let dbPromise;
@@ -1120,8 +1126,16 @@ function initDB() {
                 return store.getAll().then(forms => {
                     return Promise.all(
                         forms.map(form => {
+                            let updated = false;
                             if (form.sincronizado === undefined) {
                                 form.sincronizado = false;
+                                updated = true;
+                            }
+                            if (form.chaveUnica === undefined) {
+                                form.chaveUnica = generateUniqueKey();
+                                updated = true;
+                            }
+                            if (updated) {
                                 return store.put(form);
                             }
                         })
@@ -1130,7 +1144,8 @@ function initDB() {
             }
         },
     });
-    return dbPromise;
+    
+    return dbPromise; // ESTA LINHA DEVE SEMPRE FICAR NO FINAL
 }
 
 
@@ -1182,7 +1197,8 @@ async function salvarFormularioLocal() {
         materiais: state.materiais || [],
         assinaturas: state.assinaturas || {},
 		sincronizado: false,
-		syncedAt: null
+		syncedAt: null,
+		chaveUnica: generateUniqueKey()
     };
 
     try {
@@ -2127,9 +2143,10 @@ async function syncSingleForm(form) {
                 // pode ser necessário tratamento especial
                 hasFotos: form.fotos && form.fotos.length > 0,
                 hasAssinaturas: form.assinaturas && 
-                    (form.assinaturas.cliente || form.assinaturas.tecnico)
+                    (form.assinaturas.cliente || form.assinaturas.tecnico),
+				chaveUnica: form.chaveUnica
             },
-            chave: SYNC_CONFIG.chave
+            chave: form.chaveUnica
         };
         
         const response = await fetch(SYNC_CONFIG.endpoint, {
