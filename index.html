@@ -611,6 +611,53 @@ const estoqueData = [
     { codigo: '9747', material: 'PORCA PROT. BOTÃO REGISTRA' }
 ];
 
+	// ======== ADICIONAR NO INÍCIO DO SCRIPT (logo após as variáveis globais) ========
+
+// Verificar autenticação
+function checkAuth() {
+    const currentUser = sessionStorage.getItem('currentUser');
+    if (!currentUser) {
+        window.location.href = 'login.html';
+        return null;
+    }
+    return JSON.parse(currentUser);
+}
+
+// Executar verificação no início
+const currentUser = checkAuth();
+if (!currentUser) {
+    throw new Error('Usuário não autenticado');
+}
+
+// Exibir informações do usuário no header
+function updateUserInfo() {
+    const userInfoHTML = `
+        <div class="flex items-center space-x-3">
+            <div class="text-right">
+                <p class="text-sm font-semibold text-gray-800">${currentUser.nome}</p>
+                <p class="text-xs text-gray-500">ID: ${currentUser.id}</p>
+            </div>
+            <button id="logout-btn" class="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+    `;
+    
+    // Adicionar após o status no header
+    const statusDiv = document.getElementById('status').parentElement;
+    const userDiv = document.createElement('div');
+    userDiv.innerHTML = userInfoHTML;
+    statusDiv.appendChild(userDiv);
+    
+    // Event listener do logout
+    document.getElementById('logout-btn').addEventListener('click', function() {
+        if (confirm('Deseja realmente sair?')) {
+            sessionStorage.removeItem('currentUser');
+            window.location.href = 'login.html';
+        }
+    });
+}
+
         // Estado da aplicação
         let state = {
             fotos: [],
@@ -669,17 +716,20 @@ const estoqueData = [
             setupSignatureCanvas(canvasTecnico, ctxTecnico, 'tecnico');
             populateMaterialsDatalist();
 
-            // Registrar Service Worker
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(registration => {
-                        console.log('Service Worker registrado:', registration);
-                    })
-                    .catch(error => {
-                        console.log('Falha no Service Worker:', error);
-                    });
-            }
-        }
+    updateUserInfo();
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js?v=10')
+                .then(reg => {
+                    console.log('Service Worker registrado com sucesso.');
+                })
+                .catch(error => {
+                    console.error('Falha no registro do Service Worker:', error);
+                });
+        });
+    }
+}
 
         function updateOnlineStatus() {
             if (navigator.onLine) {
@@ -1097,6 +1147,9 @@ const FIELD_ID_MAP = {
 const DB_NAME = 'FormulariosDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'formularios';
+const DB_VERSION = 2;
+const STORE_FORMULARIOS = 'formularios';
+const STORE_USUARIOS = 'usuarios';
 
 let dbPromise;
 
@@ -1104,16 +1157,21 @@ let dbPromise;
 function initDB() {
     if (dbPromise) return dbPromise;
 
-    // A biblioteca 'idb' facilita o uso de Promises
     dbPromise = idb.openDB(DB_NAME, DB_VERSION, {
-        upgrade(db) {
-            // Cria a Object Store (tabela) se não existir
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                // A chave principal será 'id' (o Date.now() usado como timestamp)
-                const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-                // Criar índices para facilitar a busca/ordenação
-                store.createIndex('cliente', 'cliente', { unique: false });
-                store.createIndex('servico', 'servico', { unique: false });
+        upgrade(db, oldVersion, newVersion, transaction) {
+            // Store de formulários
+            if (!db.objectStoreNames.contains(STORE_FORMULARIOS)) {
+                const storeFormularios = db.createObjectStore(STORE_FORMULARIOS, { keyPath: 'id' });
+                storeFormularios.createIndex('cliente', 'cliente', { unique: false });
+                storeFormularios.createIndex('servico', 'servico', { unique: false });
+                storeFormularios.createIndex('userId', 'userId', { unique: false });
+                storeFormularios.createIndex('fichaId', 'fichaId', { unique: false });
+            }
+            
+            // Store de usuários
+            if (!db.objectStoreNames.contains(STORE_USUARIOS)) {
+                const storeUsuarios = db.createObjectStore(STORE_USUARIOS, { keyPath: 'id' });
+                storeUsuarios.createIndex('nome', 'nome', { unique: false });
             }
         },
     });
@@ -1148,43 +1206,38 @@ async function limparRegistrosAntigos(db) {
 
 // Salva o formulário no IndexedDB
 async function salvarFormularioLocal() {
-    // Estas funções precisam estar definidas no seu escopo global
-    // if (!validateForm()) return; 
-    // const f = collectFormData(); 
-
-    // **ASSUME-SE** que `validateForm()` e `collectFormData()` existem e são síncronas.
     if (!validateForm()) return;
-    const f = collectFormData(); 
+    const f = collectFormData();
+
+    // Gerar ID da ficha
+    const sequence = await getNextSequence(currentUser.id);
+    const fichaId = formatFichaId(currentUser.id, sequence);
 
     const id = Date.now();
 
     const registro = {
-        id: id, 
+        id: id,
+        fichaId: fichaId, // NOVO CAMPO
+        userId: currentUser.id, // NOVO CAMPO
+        userName: currentUser.nome, // NOVO CAMPO
         createdAt: new Date().toISOString(),
         cliente: f.cliente || '',
         servico: f.servico || '',
         formData: f,
-        // Incluímos fotos e assinaturas.
-        fotos: state.fotos || [], 
+        fotos: state.fotos || [],
         materiais: state.materiais || [],
         assinaturas: state.assinaturas || {}
     };
 
     try {
         const db = await initDB();
-        
-        // 1. Salva o novo registro no IndexedDB
-        // O método .put() insere ou atualiza um objeto
-        await db.put(STORE_NAME, registro); 
+        await db.put(STORE_FORMULARIOS, registro);
 
-        showNotification('Formulário salvo localmente!', 'success');
-        
-        // 2. Renderiza a UI e garante a limpeza
+        showNotification(`Formulário salvo! ID: ${fichaId}`, 'success');
         await renderFormulariosSalvos();
     } catch (e) {
         console.error("Erro ao salvar no IndexedDB:", e);
-        // QuotaExceededError pode acontecer até no IndexedDB, mas é raro
-        showNotification('Erro: Falha ao salvar no armazenamento local. Verifique a cota.', 'error');
+        showNotification('Erro ao salvar no armazenamento local.', 'error');
     }
 }
 
@@ -1197,17 +1250,12 @@ async function renderFormulariosSalvos() {
         container = document.createElement('section');
         container.id = containerId;
         container.className = 'form-section';
-        // ASSUME-SE que document.querySelector('main') existe
         const main = document.querySelector('main');
         if (main) {
             main.appendChild(container);
-        } else {
-            console.error("Elemento 'main' não encontrado. Não é possível renderizar a seção de salvos.");
-            return;
         }
     }
 
-    // Estrutura HTML
     container.innerHTML = `
         <h2 class="text-xl font-semibold flex items-center">
             <i class="fas fa-history text-blue-600 mr-2"></i> Formulários Salvos
@@ -1219,30 +1267,30 @@ async function renderFormulariosSalvos() {
 
     try {
         const db = await initDB();
-
-        // Faz a limpeza antes de ler a lista
         await limparRegistrosAntigos(db);
 
-        // Obtém todos os registros do IndexedDB
-        let registros = await db.getAll(STORE_NAME);
+        let registros = await db.getAll(STORE_FORMULARIOS);
         
-        // Ordenar pelo ID (mais novo primeiro)
-        registros.sort((a, b) => b.id - a.id); 
+        // Filtrar por usuário atual
+        registros = registros.filter(r => r.userId === currentUser.id);
+        registros.sort((a, b) => b.id - a.id);
 
         if (registros.length === 0) {
-            lista.innerHTML = `<p class="text-gray-500 text-sm">Nenhum formulário salvo nas últimas 24h.</p>`;
+            lista.innerHTML = `<p class="text-gray-500 text-sm">Nenhum formulário salvo.</p>`;
             return;
         }
 
-        // Renderiza os itens na lista
         registros.forEach(registro => {
             const dataLegivel = new Date(registro.id).toLocaleString();
             const item = document.createElement('div');
             item.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-lg shadow-sm';
             item.innerHTML = `
                 <div>
-                    <div class="font-medium text-gray-800">${registro.cliente || '—'}</div>
-                    <div class="text-sm text-gray-500">${registro.servico || '—'} • <span class="text-blue-600">${dataLegivel}</span></div>
+                    <div class="flex items-center gap-2">
+                        <span class="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded">${registro.fichaId || 'S/ID'}</span>
+                        <span class="font-medium text-gray-800">${registro.cliente || '—'}</span>
+                    </div>
+                    <div class="text-sm text-gray-500 mt-1">${registro.servico || '—'} • ${dataLegivel}</div>
                 </div>
                 <div class="flex space-x-2">
                     <button class="btn-secondary px-3 py-1 rounded edit-btn" data-id="${registro.id}">
@@ -1256,11 +1304,10 @@ async function renderFormulariosSalvos() {
             lista.appendChild(item);
         });
 
-        // Delegação dos eventos - DEVE SER FEITA APÓS INSERIR OS ITENS NA LISTA
         lista.querySelectorAll('.edit-btn').forEach(btn => {
             btn.addEventListener('click', e => {
                 const id = e.currentTarget.dataset.id;
-                carregarFormularioLocal(id); 
+                carregarFormularioLocal(id);
             });
         });
 
@@ -1272,8 +1319,8 @@ async function renderFormulariosSalvos() {
         });
 
     } catch (e) {
-        console.error("Erro fatal ao renderizar formulários do IndexedDB:", e);
-        lista.innerHTML = `<p class="text-red-500 text-sm">Erro ao carregar lista de formulários. (Verifique a console.)</p>`;
+        console.error("Erro ao renderizar formulários:", e);
+        lista.innerHTML = `<p class="text-red-500 text-sm">Erro ao carregar lista.</p>`;
     }
 }
 
@@ -1410,17 +1457,17 @@ exportBtn.addEventListener('click', function(e) {
 // ======== GERADOR DE PDF (FORMATAÇÃO ORIGINAL DO GERADOR PDF.html) ========
 
 // Garante que o jsPDF foi carregado antes de gerar
-async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas) {
+async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas, fichaId) {
     if (!window.jspdf || !window.jspdf.jsPDF) {
         console.warn("jsPDF ainda não carregado, adiando geração...");
-        setTimeout(() => gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas), 500);
+        setTimeout(() => gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas, fichaId), 500);
         return;
     }
 
     try {
-        await gerarFichaPDF(formData, materiais, fotos, assinaturas);
-        await gerarRelatorioPDF(formData, materiais, fotos, assinaturas);
-        showNotification("PDFs gerados com sucesso!", "success");
+        await gerarFichaPDF(formData, materiais, fotos, assinaturas, fichaId);
+        await gerarRelatorioPDF(formData, materiais, fotos, assinaturas, fichaId);
+        showNotification(`PDFs gerados! ID: ${fichaId}`, "success");
     } catch (e) {
         console.error("Erro ao gerar PDFs:", e);
         showNotification("Erro ao gerar PDFs", "error");
@@ -1438,25 +1485,28 @@ function formatDate(dateString) {
 }
 
 // ======== FICHA DE MANUTENÇÃO ========
-async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
+async function gerarFichaPDF(formData, materiais, fotos, assinaturas, fichaId) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF("p", "mm", "a4");
     const logo = await carregarImagem("Logo.png");
     const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
     let y = 20;
 
     // Logo e cabeçalho
     doc.setFillColor(0, 82, 163);
     doc.rect(0, 0, pageWidth, 17, 'F');
-	
+    
     if (logo) doc.addImage(logo, "PNG", 10, 1.5, 30, 15);
     
-
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('FICHA DE MANUTENÇÃO', pageWidth / 2, 11, { align: 'center' });
+    
+    // ADICIONAR ID DA FICHA
+    doc.setFontSize(10);
+    doc.text(`ID: ${fichaId || 'N/A'}`, pageWidth - 10, 11, { align: 'right' });
+    
     y = 22;
 
     const tableStyles4Col = {
@@ -1850,46 +1900,52 @@ function carregarImagem(src) {
 
 
 
-        function exportData() {
-            if (!validateForm()) return;
+        async function exportData() {
+    if (!validateForm()) return;
 
-            const formData = collectFormData();
-            
-            const dataToExport = {
-                formData: formData,
-                fotos: state.fotos,
-                materiais: state.materiais,
-                assinaturas: state.assinaturas,
-                exportTimestamp: new Date().toISOString(),
-                version: '1.0'
-            };
-            
-            const dataStr = JSON.stringify(dataToExport, null, 2);
-            const dataBlob = new Blob([dataStr], {type: 'application/json'});
-            
-            const url = URL.createObjectURL(dataBlob);
-            const link = document.createElement('a');
-            link.href = url;
-            
-            // Nome do arquivo com data e cliente
-            const cliente = formData.cliente.replace(/[^a-zA-Z0-9]/g, '_');
-            const data = new Date().toISOString().split('T')[0];
-            link.download = `servico_${cliente}_${data}.json`;
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            
-            showNotification('Dados exportados com sucesso!', 'success');
-			setTimeout(() => {
-				try {
-					gerarPDFsAutomaticamente(formData, state.materiais, state.fotos, state.assinaturas);
-				} catch (err) {
-					console.error('Erro ao gerar PDFs:', err);
-				}
-			}, 500);
+    const formData = collectFormData();
+    
+    // Gerar ID da ficha
+    const sequence = await getNextSequence(currentUser.id);
+    const fichaId = formatFichaId(currentUser.id, sequence);
+    
+    const dataToExport = {
+        fichaId: fichaId,
+        userId: currentUser.id,
+        userName: currentUser.nome,
+        formData: formData,
+        fotos: state.fotos,
+        materiais: state.materiais,
+        assinaturas: state.assinaturas,
+        exportTimestamp: new Date().toISOString(),
+        version: '1.0'
+    };
+    
+    const dataStr = JSON.stringify(dataToExport, null, 2);
+    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+    
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    const cliente = formData.cliente.replace(/[^a-zA-Z0-9]/g, '_');
+    link.download = `servico_${fichaId}_${cliente}.json`;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showNotification(`Dados exportados! ID: ${fichaId}`, 'success');
+    
+    setTimeout(() => {
+        try {
+            gerarPDFsAutomaticamente(formData, state.materiais, state.fotos, state.assinaturas, fichaId);
+        } catch (err) {
+            console.error('Erro ao gerar PDFs:', err);
         }
+    }, 500);
+}
 
         function showNotification(message, type) {
             notification.className = `notification ${type}`;
