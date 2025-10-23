@@ -1101,7 +1101,7 @@ const FIELD_ID_MAP = {
 
 // ======== CONFIGURAÇÃO DO INDEXEDDB ========
 const DB_NAME = 'FormulariosDB';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORE_NAME = 'formularios';
 
 let dbPromise;
@@ -1112,39 +1112,67 @@ function initDB() {
 
     dbPromise = idb.openDB(DB_NAME, DB_VERSION, {
         upgrade(db, oldVersion) {
+            console.log('Migrando banco de dados da versão', oldVersion, 'para', DB_VERSION);
+            
+            // Sempre cria a store se não existir
             if (!db.objectStoreNames.contains(STORE_NAME)) {
+                console.log('Criando nova store:', STORE_NAME);
                 const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
                 store.createIndex('cliente', 'cliente', { unique: false });
                 store.createIndex('servico', 'servico', { unique: false });
                 store.createIndex('sincronizado', 'sincronizado', { unique: false });
-            }
-            
-            // Migração: adicionar campos de sincronização se necessário
-            if (oldVersion < 2) {
+            } else {
+                console.log('Store já existe:', STORE_NAME);
+                
+                // Para migrações, fazemos uma de cada vez
                 const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
-                return store.getAll().then(forms => {
-                    return Promise.all(
-                        forms.map(form => {
-                            let updated = false;
+                
+                // Migração da versão 1 para 2: adicionar campo sincronizado
+                if (oldVersion < 2) {
+                    console.log('Migrando para versão 2: adicionando campo sincronizado');
+                    return store.getAll().then(forms => {
+                        const updates = forms.map(form => {
                             if (form.sincronizado === undefined) {
                                 form.sincronizado = false;
-                                updated = true;
-                            }
-                            if (form.chaveUnica === undefined) {
-                                form.chaveUnica = generateUniqueKey();
-                                updated = true;
-                            }
-                            if (updated) {
                                 return store.put(form);
                             }
-                        })
-                    );
-                });
+                        }).filter(Boolean);
+                        return Promise.all(updates);
+                    });
+                }
+                
+                // Migração da versão 2 para 3: adicionar campo chaveUnica
+                if (oldVersion < 3) {
+                    console.log('Migrando para versão 3: adicionando campo chaveUnica');
+                    return store.getAll().then(forms => {
+                        const updates = forms.map(form => {
+                            if (form.chaveUnica === undefined) {
+                                form.chaveUnica = generateUniqueKey();
+                                return store.put(form);
+                            }
+                        }).filter(Boolean);
+                        return Promise.all(updates);
+                    });
+                }
+                
+                // Migração da versão 3 para 4: apenas atualização estrutural
+                if (oldVersion < 4) {
+                    console.log('Migrando para versão 4: atualização estrutural');
+                    // Nada para fazer, apenas atualiza a versão
+                    return Promise.resolve();
+                }
             }
         },
+    }).then(db => {
+        console.log('Banco de dados inicializado com sucesso');
+        return db;
+    }).catch(error => {
+        console.error('Erro ao inicializar banco de dados:', error);
+        dbPromise = null; // Permite tentar novamente
+        throw error;
     });
     
-    return dbPromise; // ESTA LINHA DEVE SEMPRE FICAR NO FINAL
+    return dbPromise;
 }
 
 
@@ -1433,8 +1461,14 @@ function drawDataUrlOnCanvas(dataUrl, canvas, ctx) {
 
 async function startApp() {
     try {
-        // Inicializar banco de dados
-        await initDB();
+        // Inicializar banco de dados com tratamento de erro específico
+        try {
+            await initDB();
+        } catch (dbError) {
+            console.error('Erro crítico no banco de dados:', dbError);
+            // Tenta recriar o banco de dados
+            await recriarBancoDados();
+        }
         
         // Inicializar sistema de sincronização
         initSync();
@@ -1442,42 +1476,56 @@ async function startApp() {
         // Renderizar formulários salvos
         await renderFormulariosSalvos();
         
-        // Configurações de status online/offline
+        // Resto das configurações...
         updateOnlineStatus();
         window.addEventListener('online', updateOnlineStatus);
         window.addEventListener('offline', updateOnlineStatus);
-
-        // Configurar event listeners
         setupEventListeners();
-        
-        // Configurar canvas de assinatura
         setupSignatureCanvas(canvasCliente, ctxCliente, 'cliente');
         setupSignatureCanvas(canvasTecnico, ctxTecnico, 'tecnico');
-        
-        // Popular lista de materiais
         populateMaterialsDatalist();
 
         // Registrar Service Worker
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        // Altere a versão para 16
-        navigator.serviceWorker.register('./sw.js?v=18')
-            .then(reg => {
-                console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
-            })
-            .catch(error => {
-                console.error('Falha no registro do Service Worker:', error);
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js?v=20')
+                    .then(reg => {
+                        console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
+                    })
+                    .catch(error => {
+                        console.error('Falha no registro do Service Worker:', error);
+                    });
             });
-    });
-}
+        }
         
     } catch (error) {
         console.error("Falha ao iniciar a aplicação:", error);
-        // Exibir uma mensagem de erro na UI se a inicialização falhar
-        const main = document.querySelector('main');
-        if (main) {
-            main.innerHTML += '<p class="text-red-600 p-4">Erro Crítico: Não foi possível inicializar o armazenamento local (IndexedDB). A função de salvar não funcionará.</p>';
+        showNotification('Erro ao inicializar aplicação. Recarregue a página.', 'error');
+    }
+}
+
+// Função para recriar o banco em caso de erro
+async function recriarBancoDados() {
+    try {
+        console.log('Tentando recriar banco de dados...');
+        // Fecha conexão existente
+        if (dbPromise) {
+            const db = await dbPromise;
+            db.close();
+            dbPromise = null;
         }
+        
+        // Deleta o banco existente
+        await idb.deleteDB(DB_NAME);
+        console.log('Banco antigo deletado');
+        
+        // Recria o banco
+        await initDB();
+        console.log('Novo banco criado com sucesso');
+        
+    } catch (error) {
+        console.error('Falha ao recriar banco de dados:', error);
+        throw error;
     }
 }
 
