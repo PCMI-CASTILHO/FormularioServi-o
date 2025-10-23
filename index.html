@@ -701,6 +701,36 @@ function updateUserInfo() {
         let lastXTecnico = 0;
         let lastYTecnico = 0;
 
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            initApp();
+        });
+
+        function initApp() {
+            updateOnlineStatus();
+            window.addEventListener('online', updateOnlineStatus);
+            window.addEventListener('offline', updateOnlineStatus);
+
+            setupEventListeners();
+            setupSignatureCanvas(canvasCliente, ctxCliente, 'cliente');
+            setupSignatureCanvas(canvasTecnico, ctxTecnico, 'tecnico');
+            populateMaterialsDatalist();
+
+    updateUserInfo();
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js?v=10')
+                .then(reg => {
+                    console.log('Service Worker registrado com sucesso.');
+                })
+                .catch(error => {
+                    console.error('Falha no registro do Service Worker:', error);
+                });
+        });
+    }
+}
+
         function updateOnlineStatus() {
             if (navigator.onLine) {
                 statusIndicator.className = 'status-indicator status-online';
