@@ -1461,7 +1461,7 @@ async function startApp() {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         // Altere a versão para 16
-        navigator.serviceWorker.register('./sw.js?v=17')
+        navigator.serviceWorker.register('./sw.js?v=18')
             .then(reg => {
                 console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
             })
