@@ -1458,17 +1458,18 @@ async function startApp() {
         populateMaterialsDatalist();
 
         // Registrar Service Worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=16')
-                    .then(reg => {
-                        console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
-                    })
-                    .catch(error => {
-                        console.error('Falha no registro do Service Worker:', error);
-                    });
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        // Altere a versão para 16
+        navigator.serviceWorker.register('./sw.js?v=17')
+            .then(reg => {
+                console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
+            })
+            .catch(error => {
+                console.error('Falha no registro do Service Worker:', error);
             });
-        }
+    });
+}
         
     } catch (error) {
         console.error("Falha ao iniciar a aplicação:", error);
