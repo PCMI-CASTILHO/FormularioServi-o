@@ -1,5 +1,5 @@
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v23';
+const CACHE_NAME = 'formulario-cache-v24';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
