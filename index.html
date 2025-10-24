@@ -640,6 +640,21 @@ function generateUniqueKey() {
     return `form_${timestamp}_${randomStr}`;
 }
 
+async function registrarBackgroundSync() {
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            await registration.sync.register('background-sync-formularios');
+            console.log('✅ Background Sync registrado para sincronização em background');
+            return true;
+        } catch (error) {
+            console.log('⚠️ Background Sync não disponível:', error);
+            return false;
+        }
+    }
+    return false;
+}
+
 // ======== ESTADO DA SINCRONIZAÇÃO ========
 let syncState = {
     pendingCount: 0,
@@ -1229,21 +1244,26 @@ async function salvarFormularioLocal() {
     };
 
     try {
-        const db = await initDB();
-        
-        // 1. Salva o novo registro no IndexedDB
-        // O método .put() insere ou atualiza um objeto
-        await db.put(STORE_NAME, registro);
+    const db = await initDB();
+    
+    // 1. Salva o novo registro no IndexedDB
+    await db.put(STORE_NAME, registro);
 
-		// Atualizar contagem de pendentes
-await updatePendingCount();
+    // ✅ REGISTRA BACKGROUND SYNC AQUI! (NOVA LINHA)
+    await registrarBackgroundSync();
+    
+    // Atualizar contagem de pendentes
+    await updatePendingCount();
 
-// Tentar sincronizar automaticamente se online
-if (navigator.onLine) {
-    setTimeout(() => attemptSync(), 1000);
-}
+    // Tentar sincronizar automaticamente se online
+    if (navigator.onLine) {
+        setTimeout(() => attemptSync(), 1000);
+    }
 
-        showNotification('Formulário salvo localmente!', 'success');
+    showNotification('Formulário salvo localmente!', 'success');
+    
+    // 2. Renderiza a UI e garante a limpeza
+    await renderFormulariosSalvos();
         
         // 2. Renderiza a UI e garante a limpeza
         await renderFormulariosSalvos();
@@ -1488,7 +1508,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=22')
+                navigator.serviceWorker.register('./sw.js?v=23')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
