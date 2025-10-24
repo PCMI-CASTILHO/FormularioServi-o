@@ -630,7 +630,7 @@ const estoqueData = [
 const SYNC_CONFIG = {
     endpoint: 'https://vps.pesoexato.com/servico_set',
     interval: 5000, // 5 segundos
-    maxRetention: 24 * 60 * 60 * 1000 // 24 horas em milissegundos
+    maxRetention: 14 * 24 * 60 * 60 * 1000 // 24 horas em milissegundos
 };
 
 		// ======== FUNÇÃO PARA GERAR CHAVE ÚNICA ========
@@ -1193,7 +1193,7 @@ function initDB() {
 
 // Função auxiliar para remover registros mais antigos que 24h
 async function limparRegistrosAntigos(db) {
-    const twentyFourHours = 24 * 60 * 60 * 1000;
+    const twentyFourHours = 14 * 24 * 60 * 60 * 1000;
     const cutoff = Date.now() - twentyFourHours;
 
     try {
@@ -1508,7 +1508,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=23')
+                navigator.serviceWorker.register('./sw.js?v=24')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
