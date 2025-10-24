@@ -1,5 +1,6 @@
+importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v24';
+const CACHE_NAME = 'formulario-cache-v25';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -66,13 +67,13 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   
   // Para APIs de sincronização, sempre vai para rede
-  if (url.hostname === 'vps..com') {
+  if (url.hostname === 'vps.com') {
     event.respondWith(fetch(event.request));
     return;
   }
   
   // Para CDNs externas, tenta cache primeiro, depois rede
-  if (url.hostname !== 'servicos..com') {
+  if (url.hostname !== 'servicos.com') {
     event.respondWith(
       caches.match(event.request)
         .then(cached => cached || fetch(event.request))
@@ -107,7 +108,7 @@ self.addEventListener('fetch', (event) => {
             // Fallback para páginas HTML
             if (event.request.destination === 'document' || 
                 event.request.mode === 'navigate') {
-              return caches.match('https://servicos.pesoexato.com/index.html')
+              return caches.match('https://pcmi-castilho.github.io/FormularioServi-o//index.html')
                 .then(html => html || criarPaginaOffline());
             }
             
@@ -221,7 +222,7 @@ async function sincronizarFormulariosEmBackground() {
                 chave: form.chaveUnica
             };
             
-            const response = await fetch('https://vps.pesoexato.com/servico_set', {
+            const response = await fetch('https://vps.pesoexato.com/servico/set', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
