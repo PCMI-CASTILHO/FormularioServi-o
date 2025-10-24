@@ -1,11 +1,11 @@
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v21';
+const CACHE_NAME = 'formulario-cache-v22';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
-  'https://servicos.pesoexato.com/',
-  'https://servicos.pesoexato.com/index.html',
-  'https://servicos.pesoexato.com/manifest.json',
+  'https://pcmi-castilho.github.io/FormularioServi-o/',
+  'https://pcmi-castilho.github.io/FormularioServi-o/index.html',
+  'https://pcmi-castilho.github.io/FormularioServi-o/manifest.json',
   // CDNs externos que você usa
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
@@ -24,8 +24,8 @@ self.addEventListener('install', (event) => {
         console.log('📦 Service Worker: Cacheando arquivos essenciais');
         // Cache apenas os arquivos principais, ignora erros em outros
         return cache.addAll([
-          'https://servicos.pesoexato.com/',
-          'https://servicos.pesoexato.com/index.html'
+          'https://pcmi-castilho.github.io/FormularioServi-o/',
+          'https://pcmi-castilho.github.io/FormularioServi-o/index.html'
         ]).catch(error => {
           console.warn('⚠️ Alguns arquivos não puderam ser cacheados:', error);
         });
@@ -66,13 +66,13 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   
   // Para APIs de sincronização, sempre vai para rede
-  if (url.hostname === 'vps.pesoexato.com') {
+  if (url.hostname === 'vps..com') {
     event.respondWith(fetch(event.request));
     return;
   }
   
   // Para CDNs externas, tenta cache primeiro, depois rede
-  if (url.hostname !== 'servicos.pesoexato.com') {
+  if (url.hostname !== 'servicos..com') {
     event.respondWith(
       caches.match(event.request)
         .then(cached => cached || fetch(event.request))
