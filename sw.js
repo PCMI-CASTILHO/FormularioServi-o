@@ -1,5 +1,5 @@
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v22';
+const CACHE_NAME = 'formulario-cache-v23';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -189,4 +189,52 @@ function criarPaginaOffline() {
   return new Response(html, {
     headers: { 'Content-Type': 'text/html' }
   });
+}
+
+// ADICIONE no final do seu sw.js:
+self.addEventListener('sync', (event) => {
+    if (event.tag === 'background-sync-formularios') {
+        console.log('📱 Background Sync disparado!');
+        event.waitUntil(sincronizarFormulariosEmBackground());
+    }
+});
+
+async function sincronizarFormulariosEmBackground() {
+    try {
+        // Abre o banco - isso funciona em background!
+        const db = await idb.openDB('FormulariosDB', 4);
+        const todosForms = await db.getAll('formularios');
+        const pendentes = todosForms.filter(f => !f.sincronizado);
+        
+        console.log(`🔄 Sincronizando ${pendentes.length} formulários em background...`);
+        
+        for (const form of pendentes) {
+            const payload = {
+                json_dados: {
+                    id: form.id,
+                    cliente: form.cliente,
+                    servico: form.servico,
+                    formData: form.formData,
+                    materiais: form.materiais,
+                    chaveUnica: form.chaveUnica
+                },
+                chave: form.chaveUnica
+            };
+            
+            const response = await fetch('https://vps.pesoexato.com/servico_set', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            if (response.ok) {
+                form.sincronizado = true;
+                form.syncedAt = new Date().toISOString();
+                await db.put('formularios', form);
+                console.log(`✅ Formulário ${form.id} sincronizado em background`);
+            }
+        }
+    } catch (error) {
+        console.error('❌ Erro no Background Sync:', error);
+    }
 }
