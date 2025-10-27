@@ -62,8 +62,12 @@
 
   <script>
     async function carregar() {
-      const res = await fetch('https://vps.pesoexato.com/servico_set');
+      const res = await fetch('https://vps.pesoexato.com/servico_list');
+      console.log("🔍 Resposta do servidor:", res);
+      if (!res.ok) throw new Error(`Erro HTTP ${res.status}`);
+      
       const dados = await res.json();
+      console.log("📦 Dados recebidos:", dados);
 
       // --- GRÁFICOS ---
       const tipos = {}, tecnicos = {};
