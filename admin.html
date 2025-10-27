@@ -14,25 +14,25 @@
   
   <!-- ADICIONE FONT AWESOME -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
+  
   <style>
-.btn-primary {
-  background-color: #3b82f6;
-  color: white;
-  transition: all 0.3s;
-}
-.btn-primary:hover {
-  background-color: #2563eb;
-}
-.btn-secondary {
-  background-color: #f1f5f9;
-  color: #475569;
-  border: 1px solid #cbd5e1;
-}
-.btn-secondary:hover {
-  background-color: #e2e8f0;
-}
-</style>
+    .btn-primary {
+      background-color: #3b82f6;
+      color: white;
+      transition: all 0.3s;
+    }
+    .btn-primary:hover {
+      background-color: #2563eb;
+    }
+    .btn-secondary {
+      background-color: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+    }
+    .btn-secondary:hover {
+      background-color: #e2e8f0;
+    }
+  </style>
 </head>
 
 <body class="bg-gray-50 p-6 min-h-screen">
@@ -43,32 +43,51 @@
     </button>
   </header>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-    <div class="bg-white shadow p-4 rounded">
-      <h3 class="text-lg font-semibold mb-2">Serviços por Tipo</h3>
-      <canvas id="grafico-servicos"></canvas>
-    </div>
-    <div class="bg-white shadow p-4 rounded">
-      <h3 class="text-lg font-semibold mb-2">Serviços por Técnico</h3>
-      <canvas id="grafico-tecnicos"></canvas>
-    </div>
+  <!-- Loading State -->
+  <div id="loading" class="text-center py-8">
+    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    <p class="mt-2 text-gray-600">Carregando dados...</p>
   </div>
 
-  <div class="bg-white shadow p-6 rounded">
-    <h3 class="text-xl font-semibold mb-4">Lista de Formulários</h3>
-    <table id="tabela" class="display w-full">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Cliente</th>
-          <th>Técnico</th>
-          <th>Serviço</th>
-          <th>Data</th>
-          <th>Ver</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+  <!-- Error State -->
+  <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+    <i class="fas fa-exclamation-triangle text-red-500 text-4xl mb-4"></i>
+    <h2 class="text-xl font-semibold text-red-800 mb-2">Erro ao carregar dados</h2>
+    <p id="error-message" class="text-red-600 mb-4"></p>
+    <button onclick="carregar()" class="btn-primary px-4 py-2 rounded">
+      <i class="fas fa-redo mr-2"></i> Tentar Novamente
+    </button>
+  </div>
+
+  <!-- Content -->
+  <div id="content" class="hidden">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div class="bg-white shadow p-4 rounded">
+        <h3 class="text-lg font-semibold mb-2">Serviços por Tipo</h3>
+        <canvas id="grafico-servicos"></canvas>
+      </div>
+      <div class="bg-white shadow p-4 rounded">
+        <h3 class="text-lg font-semibold mb-2">Serviços por Técnico</h3>
+        <canvas id="grafico-tecnicos"></canvas>
+      </div>
+    </div>
+
+    <div class="bg-white shadow p-6 rounded">
+      <h3 class="text-xl font-semibold mb-4">Lista de Formulários</h3>
+      <table id="tabela" class="display w-full">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Cliente</th>
+            <th>Técnico</th>
+            <th>Serviço</th>
+            <th>Data</th>
+            <th>Ver</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Modal de visualização -->
@@ -85,291 +104,326 @@
     </div>
   </div>
 
-<script>
-async function carregar() {
-  try {
-    const res = await fetch('https://vps.pesoexato.com/servico_set');
-    const dados = await res.json();
-
-    // Processar dados para corrigir inconsistências
-    const dadosProcessados = dados.map(f => {
+  <script>
+    async function carregar() {
       try {
-        // Parse do json_dados se for string
-        const jsonDados = typeof f.json_dados === 'string' 
-          ? JSON.parse(f.json_dados) 
-          : f.json_dados;
+        // Mostrar loading, esconder erro e conteúdo
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('error').classList.add('hidden');
+        document.getElementById('content').classList.add('hidden');
+
+        console.log('Iniciando requisição para a API...');
         
-        // Corrigir hasAssinaturas se for string
-        if (typeof jsonDados.hasAssinaturas === 'string') {
-          jsonDados.hasAssinaturas = !!jsonDados.hasAssinaturas;
+        const res = await fetch('https://vps.pesoexato.com/servico_set');
+        
+        console.log('Status da resposta:', res.status);
+        console.log('Content-Type:', res.headers.get('content-type'));
+        
+        if (!res.ok) {
+          throw new Error(`Erro HTTP: ${res.status} ${res.statusText}`);
         }
-        
-        // Corrigir hasFotos se necessário
-        if (typeof jsonDados.hasFotos === 'string') {
-          jsonDados.hasFotos = jsonDados.hasFotos === 'true';
+
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await res.text();
+          console.log('Resposta não é JSON:', text.substring(0, 200));
+          throw new Error('A API retornou um formato inválido (não é JSON)');
         }
-        
-        return {
-          ...f,
-          json_dados: jsonDados,
-          // Extrair campos principais para facilitar acesso
-          id: f.id,
-          cliente: jsonDados.cliente || f.cliente,
-          tecnico: jsonDados.formData?.tecnico || jsonDados.tecnico,
-          servico: jsonDados.servico,
-          formData: jsonDados.formData || {}
-        };
-      } catch (e) {
-        console.error('Erro ao processar formulário', f.id, e);
-        return f;
-      }
-    });
 
-    console.log('Dados processados:', dadosProcessados);
+        const dados = await res.json();
+        console.log('Dados recebidos:', dados);
 
-    // --- GRÁFICOS ---
-    const tipos = {}, tecnicos = {};
-    dadosProcessados.forEach(f => {
-      if (f.servico) tipos[f.servico] = (tipos[f.servico] || 0) + 1;
-      if (f.tecnico) tecnicos[f.tecnico] = (tecnicos[f.tecnico] || 0) + 1;
-    });
-
-    // Gráfico de serviços
-    if (Object.keys(tipos).length > 0) {
-      new Chart(document.getElementById('grafico-servicos'), {
-        type: 'pie',
-        data: { 
-          labels: Object.keys(tipos), 
-          datasets: [{ 
-            data: Object.values(tipos),
-            backgroundColor: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6']
-          }] 
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: {
-              position: 'bottom'
+        // Processar dados para corrigir inconsistências
+        const dadosProcessados = dados.map(f => {
+          try {
+            // Parse do json_dados se for string
+            const jsonDados = typeof f.json_dados === 'string' 
+              ? JSON.parse(f.json_dados) 
+              : f.json_dados;
+            
+            // Corrigir hasAssinaturas se for string
+            if (typeof jsonDados.hasAssinaturas === 'string') {
+              jsonDados.hasAssinaturas = !!jsonDados.hasAssinaturas;
             }
+            
+            // Corrigir hasFotos se necessário
+            if (typeof jsonDados.hasFotos === 'string') {
+              jsonDados.hasFotos = jsonDados.hasFotos === 'true';
+            }
+            
+            return {
+              ...f,
+              json_dados: jsonDados,
+              // Extrair campos principais para facilitar acesso
+              id: f.id,
+              cliente: jsonDados.cliente || f.cliente,
+              tecnico: jsonDados.formData?.tecnico || jsonDados.tecnico,
+              servico: jsonDados.servico,
+              formData: jsonDados.formData || {}
+            };
+          } catch (e) {
+            console.error('Erro ao processar formulário', f.id, e);
+            return f;
           }
+        });
+
+        // Esconder loading e mostrar conteúdo
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('content').classList.remove('hidden');
+
+        // --- GRÁFICOS ---
+        const tipos = {}, tecnicos = {};
+        dadosProcessados.forEach(f => {
+          if (f.servico) tipos[f.servico] = (tipos[f.servico] || 0) + 1;
+          if (f.tecnico) tecnicos[f.tecnico] = (tecnicos[f.tecnico] || 0) + 1;
+        });
+
+        // Gráfico de serviços
+        if (Object.keys(tipos).length > 0) {
+          new Chart(document.getElementById('grafico-servicos'), {
+            type: 'pie',
+            data: { 
+              labels: Object.keys(tipos), 
+              datasets: [{ 
+                data: Object.values(tipos),
+                backgroundColor: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6']
+              }] 
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: {
+                  position: 'bottom'
+                }
+              }
+            }
+          });
+        } else {
+          document.getElementById('grafico-servicos').innerHTML = '<p class="text-gray-500 text-center">Nenhum dado disponível</p>';
         }
-      });
+
+        // Gráfico de técnicos
+        if (Object.keys(tecnicos).length > 0) {
+          new Chart(document.getElementById('grafico-tecnicos'), {
+            type: 'bar',
+            data: { 
+              labels: Object.keys(tecnicos), 
+              datasets: [{ 
+                data: Object.values(tecnicos), 
+                backgroundColor: '#3b82f6' 
+              }] 
+            },
+            options: {
+              responsive: true,
+              scales: {
+                y: {
+                  beginAtZero: true
+                }
+              }
+            }
+          });
+        } else {
+          document.getElementById('grafico-tecnicos').innerHTML = '<p class="text-gray-500 text-center">Nenhum dado disponível</p>';
+        }
+
+        // --- TABELA ---
+        const tbody = document.querySelector('#tabela tbody');
+        tbody.innerHTML = ''; // Limpar antes de adicionar
+        
+        dadosProcessados.forEach(f => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${f.id}</td>
+            <td>${f.cliente || '-'}</td>
+            <td>${f.tecnico || '-'}</td>
+            <td>${f.servico || '-'}</td>
+            <td>${f.formData?.dataInicial || '-'}</td>
+            <td>
+              <button class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition" onclick="abrirFicha(${f.id})">
+                <i class="fas fa-eye mr-1"></i> Ver
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        // Inicializar DataTable
+        new DataTable('#tabela', {
+          perPage: 10,
+          labels: {
+            placeholder: 'Buscar...',
+            noRows: 'Nenhum registro encontrado',
+            perPage: '{select} registros por página',
+            info: 'Mostrando {start}–{end} de {rows}'
+          }
+        });
+
+        window.formularios = dadosProcessados;
+        
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error);
+        
+        // Mostrar erro
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('content').classList.add('hidden');
+        document.getElementById('error').classList.remove('hidden');
+        document.getElementById('error-message').textContent = error.message;
+      }
     }
 
-    // Gráfico de técnicos
-    if (Object.keys(tecnicos).length > 0) {
-      new Chart(document.getElementById('grafico-tecnicos'), {
-        type: 'bar',
-        data: { 
-          labels: Object.keys(tecnicos), 
-          datasets: [{ 
-            data: Object.values(tecnicos), 
-            backgroundColor: '#3b82f6' 
-          }] 
-        },
-        options: {
-          responsive: true,
-          scales: {
-            y: {
-              beginAtZero: true
-            }
-          }
-        }
-      });
-    }
-
-    // --- TABELA ---
-    const tbody = document.querySelector('#tabela tbody');
-    tbody.innerHTML = ''; // Limpar antes de adicionar
-    
-    dadosProcessados.forEach(f => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${f.id}</td>
-        <td>${f.cliente || '-'}</td>
-        <td>${f.tecnico || '-'}</td>
-        <td>${f.servico || '-'}</td>
-        <td>${f.formData?.dataInicial || '-'}</td>
-        <td>
-          <button class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition" onclick="abrirFicha(${f.id})">
-            <i class="fas fa-eye mr-1"></i> Ver
-          </button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    // Inicializar DataTable
-    new DataTable('#tabela', {
-      perPage: 10,
-      labels: {
-        placeholder: 'Buscar...',
-        noRows: 'Nenhum registro encontrado',
-        perPage: '{select} registros por página',
-        info: 'Mostrando {start}–{end} de {rows}'
+    // --- Visualização detalhada ---
+    function abrirFicha(id) {
+      const f = window.formularios.find(x => x.id === id);
+      if (!f) {
+        alert('Formulário não encontrado');
+        return;
       }
-    });
-
-    window.formularios = dadosProcessados;
-    
-  } catch (error) {
-    console.error('Erro ao carregar dados:', error);
-    alert('Erro ao carregar dados do servidor');
-  }
-}
-
-  // --- Visualização detalhada ---
-function abrirFicha(id) {
-  const f = window.formularios.find(x => x.id === id);
-  if (!f) {
-    alert('Formulário não encontrado');
-    return;
-  }
-  
-  const formData = f.formData || {};
-  const jsonDados = f.json_dados || {};
-  
-  document.getElementById('modal').classList.remove('hidden');
-  document.getElementById('modal-titulo').innerText = `${f.servico || 'Serviço'} - ${f.cliente || 'Cliente'}`;
-  
-  // Conteúdo mais detalhado
-  document.getElementById('modal-conteudo').innerHTML = `
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="bg-gray-50 p-4 rounded">
-        <h3 class="font-semibold text-lg mb-2">Informações Básicas</h3>
-        <p><strong>Cliente:</strong> ${f.cliente || '-'}</p>
-        <p><strong>Técnico:</strong> ${f.tecnico || '-'}</p>
-        <p><strong>Serviço:</strong> ${f.servico || '-'}</p>
-        <p><strong>Cidade:</strong> ${formData.cidade || '-'}</p>
-        <p><strong>Equipamento:</strong> ${formData.equipamento || '-'}</p>
-        <p><strong>Nº Série:</strong> ${formData.numeroSerie || '-'}</p>
-      </div>
       
-      <div class="bg-gray-50 p-4 rounded">
-        <h3 class="font-semibold text-lg mb-2">Datas e Horários</h3>
-        <p><strong>Data Inicial:</strong> ${formData.dataInicial || '-'} ${formData.horaInicial || ''}</p>
-        <p><strong>Data Final:</strong> ${formData.dataFinal || '-'} ${formData.horaFinal || ''}</p>
-        <p><strong>Veículo:</strong> ${formData.veiculo || '-'}</p>
-        <p><strong>Estoque:</strong> ${formData.estoque || '-'}</p>
-      </div>
-    </div>
-    
-    <div class="bg-gray-50 p-4 rounded mt-4">
-      <h3 class="font-semibold text-lg mb-2">Relatório</h3>
-      <p class="whitespace-pre-wrap">${formData.relatorioMaquina || 'Nenhum relatório informado.'}</p>
-    </div>
-    
-    <div class="bg-gray-50 p-4 rounded mt-4">
-      <h3 class="font-semibold text-lg mb-2">Materiais Utilizados</h3>
-      ${jsonDados.materiais && jsonDados.materiais.length > 0 
-        ? jsonDados.materiais.map(m => 
-            `<p>• ${m.descricao} (Código: ${m.codigo}) - ${m.quantidade} un.</p>`
-          ).join('') 
-        : '<p>Nenhum material registrado.</p>'
-      }
-    </div>
-    
-    <div class="bg-gray-50 p-4 rounded mt-4">
-      <h3 class="font-semibold text-lg mb-2">Anexos</h3>
-      <p><strong>Fotos:</strong> ${jsonDados.hasFotos ? 'Sim' : 'Não'}</p>
-      <p><strong>Assinaturas:</strong> ${jsonDados.hasAssinaturas ? 'Sim' : 'Não'}</p>
-    </div>
-  `;
-  
-  document.getElementById('baixar-btn').onclick = () => baixarFicha(f);
-}
-
-  document.getElementById('close-modal').onclick = () => 
-    document.getElementById('modal').classList.add('hidden');
-
-  // --- Baixar como PDF ---
-  async function baixarFicha(f) {
-  try {
-    // Carregar jsPDF dinamicamente
-    if (!window.jspdf) {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
+      const formData = f.formData || {};
+      const jsonDados = f.json_dados || {};
+      
+      document.getElementById('modal').classList.remove('hidden');
+      document.getElementById('modal-titulo').innerText = `${f.servico || 'Serviço'} - ${f.cliente || 'Cliente'}`;
+      
+      // Conteúdo mais detalhado
+      document.getElementById('modal-conteudo').innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-gray-50 p-4 rounded">
+            <h3 class="font-semibold text-lg mb-2">Informações Básicas</h3>
+            <p><strong>Cliente:</strong> ${f.cliente || '-'}</p>
+            <p><strong>Técnico:</strong> ${f.tecnico || '-'}</p>
+            <p><strong>Serviço:</strong> ${f.servico || '-'}</p>
+            <p><strong>Cidade:</strong> ${formData.cidade || '-'}</p>
+            <p><strong>Equipamento:</strong> ${formData.equipamento || '-'}</p>
+            <p><strong>Nº Série:</strong> ${formData.numeroSerie || '-'}</p>
+          </div>
+          
+          <div class="bg-gray-50 p-4 rounded">
+            <h3 class="font-semibold text-lg mb-2">Datas e Horários</h3>
+            <p><strong>Data Inicial:</strong> ${formData.dataInicial || '-'} ${formData.horaInicial || ''}</p>
+            <p><strong>Data Final:</strong> ${formData.dataFinal || '-'} ${formData.horaFinal || ''}</p>
+            <p><strong>Veículo:</strong> ${formData.veiculo || '-'}</p>
+            <p><strong>Estoque:</strong> ${formData.estoque || '-'}</p>
+          </div>
+        </div>
+        
+        <div class="bg-gray-50 p-4 rounded mt-4">
+          <h3 class="font-semibold text-lg mb-2">Relatório</h3>
+          <p class="whitespace-pre-wrap">${formData.relatorioMaquina || 'Nenhum relatório informado.'}</p>
+        </div>
+        
+        <div class="bg-gray-50 p-4 rounded mt-4">
+          <h3 class="font-semibold text-lg mb-2">Materiais Utilizados</h3>
+          ${jsonDados.materiais && jsonDados.materiais.length > 0 
+            ? jsonDados.materiais.map(m => 
+                `<p>• ${m.descricao} (Código: ${m.codigo}) - ${m.quantidade} un.</p>`
+              ).join('') 
+            : '<p>Nenhum material registrado.</p>'
+          }
+        </div>
+        
+        <div class="bg-gray-50 p-4 rounded mt-4">
+          <h3 class="font-semibold text-lg mb-2">Anexos</h3>
+          <p><strong>Fotos:</strong> ${jsonDados.hasFotos ? 'Sim' : 'Não'}</p>
+          <p><strong>Assinaturas:</strong> ${jsonDados.hasAssinaturas ? 'Sim' : 'Não'}</p>
+        </div>
+      `;
+      
+      document.getElementById('baixar-btn').onclick = () => baixarFicha(f);
     }
-    
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const formData = f.formData || {};
-    
-    let y = 10;
-    
-    // Cabeçalho
-    doc.setFontSize(16);
-    doc.setTextColor(0, 82, 163);
-    doc.text(`Ficha de Serviço - ${f.cliente || 'Cliente'}`, 10, y);
-    y += 10;
-    
-    // Informações básicas
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`ID: ${f.id}`, 10, y);
-    y += 6;
-    doc.text(`Técnico: ${f.tecnico || '-'}`, 10, y);
-    y += 6;
-    doc.text(`Serviço: ${f.servico || '-'}`, 10, y);
-    y += 6;
-    doc.text(`Cidade: ${formData.cidade || '-'}`, 10, y);
-    y += 6;
-    doc.text(`Equipamento: ${formData.equipamento || '-'}`, 10, y);
-    y += 6;
-    doc.text(`Data: ${formData.dataInicial || '-'} ${formData.horaInicial || ''}`, 10, y);
-    y += 10;
-    
-    // Relatório
-    doc.setFontSize(14);
-    doc.text('Relatório:', 10, y);
-    y += 8;
-    
-    doc.setFontSize(10);
-    const relatorio = formData.relatorioMaquina || 'Nenhum relatório informado.';
-    const lines = doc.splitTextToSize(relatorio, 180);
-    doc.text(lines, 10, y);
-    y += (lines.length * 5) + 10;
-    
-    // Se precisar de nova página
-    if (y > 250) {
-      doc.addPage();
-      y = 10;
-    }
-    
-    // Materiais
-    doc.setFontSize(14);
-    doc.text('Materiais Utilizados:', 10, y);
-    y += 8;
-    
-    doc.setFontSize(10);
-    const jsonDados = f.json_dados || {};
-    if (jsonDados.materiais && jsonDados.materiais.length > 0) {
-      jsonDados.materiais.forEach((m, i) => {
-        if (y > 270) {
+
+    document.getElementById('close-modal').onclick = () => 
+      document.getElementById('modal').classList.add('hidden');
+
+    // --- Baixar como PDF ---
+    async function baixarFicha(f) {
+      try {
+        // Carregar jsPDF dinamicamente
+        if (!window.jspdf) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
+        }
+        
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const formData = f.formData || {};
+        
+        let y = 10;
+        
+        // Cabeçalho
+        doc.setFontSize(16);
+        doc.setTextColor(0, 82, 163);
+        doc.text(`Ficha de Serviço - ${f.cliente || 'Cliente'}`, 10, y);
+        y += 10;
+        
+        // Informações básicas
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`ID: ${f.id}`, 10, y);
+        y += 6;
+        doc.text(`Técnico: ${f.tecnico || '-'}`, 10, y);
+        y += 6;
+        doc.text(`Serviço: ${f.servico || '-'}`, 10, y);
+        y += 6;
+        doc.text(`Cidade: ${formData.cidade || '-'}`, 10, y);
+        y += 6;
+        doc.text(`Equipamento: ${formData.equipamento || '-'}`, 10, y);
+        y += 6;
+        doc.text(`Data: ${formData.dataInicial || '-'} ${formData.horaInicial || ''}`, 10, y);
+        y += 10;
+        
+        // Relatório
+        doc.setFontSize(14);
+        doc.text('Relatório:', 10, y);
+        y += 8;
+        
+        doc.setFontSize(10);
+        const relatorio = formData.relatorioMaquina || 'Nenhum relatório informado.';
+        const lines = doc.splitTextToSize(relatorio, 180);
+        doc.text(lines, 10, y);
+        y += (lines.length * 5) + 10;
+        
+        // Se precisar de nova página
+        if (y > 250) {
           doc.addPage();
           y = 10;
         }
-        doc.text(`• ${m.descricao} (${m.codigo}) - ${m.quantidade} un.`, 15, y);
-        y += 5;
-      });
-    } else {
-      doc.text('Nenhum material registrado.', 15, y);
+        
+        // Materiais
+        doc.setFontSize(14);
+        doc.text('Materiais Utilizados:', 10, y);
+        y += 8;
+        
+        doc.setFontSize(10);
+        const jsonDados = f.json_dados || {};
+        if (jsonDados.materiais && jsonDados.materiais.length > 0) {
+          jsonDados.materiais.forEach((m, i) => {
+            if (y > 270) {
+              doc.addPage();
+              y = 10;
+            }
+            doc.text(`• ${m.descricao} (${m.codigo}) - ${m.quantidade} un.`, 15, y);
+            y += 5;
+          });
+        } else {
+          doc.text('Nenhum material registrado.', 15, y);
+        }
+        
+        doc.save(`servico_${f.id}_${f.cliente || 'cliente'}.pdf`);
+        
+      } catch (error) {
+        console.error('Erro ao gerar PDF:', error);
+        alert('Erro ao gerar PDF');
+      }
     }
-    
-    doc.save(`servico_${f.id}_${f.cliente || 'cliente'}.pdf`);
-    
-  } catch (error) {
-    console.error('Erro ao gerar PDF:', error);
-    alert('Erro ao gerar PDF');
-  }
-}
 
-  carregar();
-</script>
+    // Iniciar carregamento quando a página carregar
+    document.addEventListener('DOMContentLoaded', carregar);
+  </script>
 </body>
 </html>
