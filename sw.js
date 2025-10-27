@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v25';
+const CACHE_NAME = 'formulario-cache-v26';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -108,7 +108,7 @@ self.addEventListener('fetch', (event) => {
             // Fallback para páginas HTML
             if (event.request.destination === 'document' || 
                 event.request.mode === 'navigate') {
-              return caches.match('https://pcmi-castilho.github.io/FormularioServi-o//index.html')
+              return caches.match('https://pcmi-castilho.github.io/FormularioServi-o/index.html')
                 .then(html => html || criarPaginaOffline());
             }
             
