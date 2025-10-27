@@ -1346,7 +1346,10 @@ if (btnVisualizar) {
     const target = ev.target.closest && ev.target.closest('#btn-visualizar-todos');
     if (target) {
       if (navigator.onLine) {
-        window.open('admin.html', '_blank');
+    <button onclick="window.location.href='index.html'" 
+        class="btn-secondary px-4 py-2 rounded-lg">
+			<i class="fas fa-arrow-left mr-2"></i> Voltar
+	</button>
       } else {
         alert("❌ Essa função só está disponível com conexão à internet.");
       }
@@ -1563,7 +1566,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=29')
+                navigator.serviceWorker.register('./sw.js?v=30')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
