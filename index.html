@@ -1346,10 +1346,7 @@ if (btnVisualizar) {
     const target = ev.target.closest && ev.target.closest('#btn-visualizar-todos');
     if (target) {
       if (navigator.onLine) {
-    <button onclick="window.location.href='index.html'" 
-        class="btn-secondary px-4 py-2 rounded-lg">
-			<i class="fas fa-arrow-left mr-2"></i> Voltar
-	</button>
+		<button onclick="window.history.back()" ...>
       } else {
         alert("❌ Essa função só está disponível com conexão à internet.");
       }
