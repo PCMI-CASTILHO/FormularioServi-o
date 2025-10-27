@@ -2265,8 +2265,8 @@ async function attemptSync(isManual = false) {
 async function syncSingleForm(form) {
     try {
         // Gerar os PDFs primeiro
-        const fichaPDF = await gerarFichaPDFParaUpload(form.formData, form.materiais, form.assinaturas);
-        const relatorioPDF = await gerarRelatorioPDFParaUpload(form.formData, form.materiais, form.fotos, form.assinaturas);
+        const fichaPDF = await gerarFichaPDF(form.formData, form.materiais, form.assinaturas);
+        const relatorioPDF = await gerarRelatorioPDF(form.formData, form.materiais, form.fotos, form.assinaturas);
         
         // Converter PDFs para Base64
         const fichaBase64 = await blobToBase64(fichaPDF);
