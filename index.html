@@ -169,7 +169,7 @@
         <span id="status-indicator" class="status-indicator status-offline"></span>
         <span id="status-text">Offline</span>
     </div>
-    <!-- Botão de Sincronização - NOVO -->
+    <!-- Botão de  - NOVO -->
     <button id="sync-btn" class="btn-primary px-4 py-2 rounded-lg flex items-center relative">
         <i class="fas fa-sync-alt mr-2"></i> Sincronizar
         <span id="sync-badge" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full text-xs w-5 h-5 flex items-center justify-center hidden">0</span>
@@ -631,9 +631,9 @@ function blobToBase64(blob) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
-            // Remover o prefixo "data:application/pdf;base64," se existir
-            const base64 = reader.result.split(',')[1];
-            resolve(base64);
+            // Manter o data URL completo para evitar problemas de encoding
+            const dataUrl = reader.result;
+            resolve(dataUrl);
         };
         reader.onerror = reject;
         reader.readAsDataURL(blob);
@@ -1576,7 +1576,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=33')
+                navigator.serviceWorker.register('./sw.js?v=34')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -2268,38 +2268,46 @@ async function syncSingleForm(form) {
         const fichaPDF = await gerarFichaPDFParaUpload(form.formData, form.materiais, form.assinaturas);
         const relatorioPDF = await gerarRelatorioPDFParaUpload(form.formData, form.materiais, form.fotos, form.assinaturas);
         
-        // Converter PDFs para Base64 para enviar no JSON
+        // Converter PDFs para Base64
         const fichaBase64 = await blobToBase64(fichaPDF);
         const relatorioBase64 = await blobToBase64(relatorioPDF);
         
-        // Preparar dados simplificados + PDFs em base64
+        // Preparar dados simplificados
+        const dadosSimplificados = {
+            // Dados essenciais
+            id: form.id,
+            createdAt: form.createdAt,
+            cliente: form.formData.cliente,
+            tecnico: form.formData.tecnico,
+            servico: form.formData.servico,
+            cidade: form.formData.cidade,
+            equipamento: form.formData.equipamento === 'OUTRO' ? form.formData.equipamentoOutro : form.formData.equipamento,
+            numeroSerie: form.formData.numeroSerie,
+            dataInicial: form.formData.dataInicial,
+            dataFinal: form.formData.dataFinal,
+            horarioInicial: form.formData.horaInicial,
+            horarioFinal: form.formData.horaFinal,
+            veiculo: form.formData.veiculo,
+            estoque: form.formData.estoque,
+            relatorio: form.formData.relatorioMaquina,
+            materiais: form.materiais,
+            chaveUnica: form.chaveUnica,
+            
+            // PDFs em base64 (apenas o conteúdo base64, sem o prefixo data URL)
+            ficha_pdf: fichaBase64,
+            relatorio_pdf: relatorioBase64
+        };
+        
+        // Criar payload no formato que o servidor espera
         const payload = {
-            json_dados: {
-                // Dados essenciais
-                id: form.id,
-                createdAt: form.createdAt,
-                cliente: form.formData.cliente,
-                tecnico: form.formData.tecnico,
-                servico: form.formData.servico,
-                cidade: form.formData.cidade,
-                equipamento: form.formData.equipamento === 'OUTRO' ? form.formData.equipamentoOutro : form.formData.equipamento,
-                numeroSerie: form.formData.numeroSerie,
-                dataInicial: form.formData.dataInicial,
-                dataFinal: form.formData.dataFinal,
-                horarioInicial: form.formData.horaInicial,
-                horarioFinal: form.formData.horaFinal,
-                veiculo: form.formData.veiculo,
-                estoque: form.formData.estoque,
-                relatorio: form.formData.relatorioMaquina,
-                materiais: form.materiais,
-                chaveUnica: form.chaveUnica,
-                
-                // PDFs em base64
-                ficha_pdf: fichaBase64,
-                relatorio_pdf: relatorioBase64
-            },
+            json_dados: JSON.stringify(dadosSimplificados), // Converter para string
             chave: form.chaveUnica
         };
+        
+        console.log('Enviando para servidor:', {
+            endpoint: SYNC_CONFIG.endpoint,
+            payload: payload
+        });
         
         const response = await fetch(SYNC_CONFIG.endpoint, {
             method: 'POST',
@@ -2313,8 +2321,8 @@ async function syncSingleForm(form) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        const result = await response.json();
-        console.log('Formulário sincronizado:', form.id, result);
+        const result = await response.text();
+        console.log('Resposta do servidor:', result);
         
         return true;
     } catch (error) {
@@ -2322,7 +2330,7 @@ async function syncSingleForm(form) {
         return false;
     }
 }
-
+		
 // ======== FUNÇÕES AUXILIARES DO INDEXEDDB ========
 async function getPendingForms() {
     try {
