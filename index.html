@@ -1346,14 +1346,14 @@ if (btnVisualizar) {
     const target = ev.target.closest && ev.target.closest('#btn-visualizar-todos');
     if (target) {
       if (navigator.onLine) {
-		<button onclick="window.history.back()" ...>
+        window.open('admin.html', '_blank');
       } else {
         alert("❌ Essa função só está disponível com conexão à internet.");
       }
     }
   });
 }
-
+	
 // Atualiza estado quando mudam eventos de rede
 window.addEventListener('online', atualizarEstadoBotao);
 window.addEventListener('offline', atualizarEstadoBotao);
@@ -1563,7 +1563,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=31')
+                navigator.serviceWorker.register('./sw.js?v=32')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
