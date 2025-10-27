@@ -626,6 +626,19 @@ const estoqueData = [
             }
         };
 
+// ======== FUNÇÃO AUXILIAR PARA CONVERTER BLOB PARA BASE64 ========
+function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            // Remover o prefixo "data:application/pdf;base64," se existir
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
 		// ======== CONFIGURAÇÕES DE SINCRONIZAÇÃO ========
 const SYNC_CONFIG = {
     endpoint: 'https://vps.pesoexato.com/servico_set',
@@ -1563,7 +1576,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=32')
+                navigator.serviceWorker.register('./sw.js?v=33')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -1807,7 +1820,7 @@ async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
     doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
     doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
     
-    doc.save(`Ficha_Manutencao_${formData.cliente || 'ficha'}.pdf`);
+    return doc.output('blob');
 }
 
 // ======== RELATÓRIO DE PRESTAÇÃO DE SERVIÇO ========
@@ -2036,7 +2049,7 @@ async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
     doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
     
     const nome = (formData.cliente || 'relatorio').replace(/[^a-zA-Z0-9]/g, "_");
-    doc.save(`Relatorio_${nome}_${new Date().toISOString().split("T")[0]}.pdf`);
+    return doc.output('blob');
 }
 
 // ======== FUNÇÃO AUXILIAR PARA CARREGAR IMAGEM ========
@@ -2251,20 +2264,39 @@ async function attemptSync(isManual = false) {
 // ======== SINCRONIZAÇÃO INDIVIDUAL DE FORMULÁRIO ========
 async function syncSingleForm(form) {
     try {
+        // Gerar os PDFs primeiro
+        const fichaPDF = await gerarFichaPDFParaUpload(form.formData, form.materiais, form.assinaturas);
+        const relatorioPDF = await gerarRelatorioPDFParaUpload(form.formData, form.materiais, form.fotos, form.assinaturas);
+        
+        // Converter PDFs para Base64 para enviar no JSON
+        const fichaBase64 = await blobToBase64(fichaPDF);
+        const relatorioBase64 = await blobToBase64(relatorioPDF);
+        
+        // Preparar dados simplificados + PDFs em base64
         const payload = {
             json_dados: {
+                // Dados essenciais
                 id: form.id,
                 createdAt: form.createdAt,
-                cliente: form.cliente,
-                servico: form.servico,
-                formData: form.formData,
+                cliente: form.formData.cliente,
+                tecnico: form.formData.tecnico,
+                servico: form.formData.servico,
+                cidade: form.formData.cidade,
+                equipamento: form.formData.equipamento === 'OUTRO' ? form.formData.equipamentoOutro : form.formData.equipamento,
+                numeroSerie: form.formData.numeroSerie,
+                dataInicial: form.formData.dataInicial,
+                dataFinal: form.formData.dataFinal,
+                horarioInicial: form.formData.horaInicial,
+                horarioFinal: form.formData.horaFinal,
+                veiculo: form.formData.veiculo,
+                estoque: form.formData.estoque,
+                relatorio: form.formData.relatorioMaquina,
                 materiais: form.materiais,
-                // Nota: Fotos e assinaturas são dados grandes, 
-                // pode ser necessário tratamento especial
-                hasFotos: form.fotos && form.fotos.length > 0,
-                hasAssinaturas: form.assinaturas && 
-                    (form.assinaturas.cliente || form.assinaturas.tecnico),
-				chaveUnica: form.chaveUnica
+                chaveUnica: form.chaveUnica,
+                
+                // PDFs em base64
+                ficha_pdf: fichaBase64,
+                relatorio_pdf: relatorioBase64
             },
             chave: form.chaveUnica
         };
