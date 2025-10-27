@@ -1296,49 +1296,71 @@ async function renderFormulariosSalvos() {
 	
 
     // Estrutura HTML
+// === Renderiza HTML da seção "Formulários Salvos" ===
 container.innerHTML = `
-    <h2 class="text-xl font-semibold flex items-center">
-        <i class="fas fa-history text-blue-600 mr-2"></i> Formulários Salvos
-        <span class="ml-2 text-sm bg-gray-200 text-gray-700 px-2 py-1 rounded-full">
-            ${syncState.pendingCount} pendente(s)
-        </span>
-    </h2>
-    <div id="lista-formularios" class="space-y-2"></div>
-	
-	<div class="text-center mt-4">
-        <button onclick="window.open('admin.html', '_blank')" 
-                class="btn-primary px-6 py-2 rounded-lg">
-            <i class="fas fa-eye mr-2"></i> Visualizar Todos
-        </button>
-    </div>
+  <h2 class="text-xl font-semibold flex items-center">
+    <i class="fas fa-history text-blue-600 mr-2"></i> Formulários Salvos
+    <span class="ml-2 text-sm bg-gray-200 text-gray-700 px-2 py-1 rounded-full">
+      ${syncState.pendingCount} pendente(s)
+    </span>
+  </h2>
+
+  <div id="lista-formularios" class="space-y-2"></div>
+
+  <div class="text-center mt-4">
+    <button id="btn-visualizar-todos"
+            class="btn-primary px-6 py-2 rounded-lg disabled:opacity-50" type="button">
+      <i class="fas fa-eye mr-2"></i> Visualizar Todos
+    </button>
+  </div>
 `;
 
-	// === Ação do botão "Visualizar Todos" ===
+// === Referência segura ao botão (pode ser null se algo der errado) ===
 const btnVisualizar = document.getElementById('btn-visualizar-todos');
 
-// Desativa o botão se estiver offline
+// Função para atualizar habilitação do botão (verifica existência primeiro)
 function atualizarEstadoBotao() {
-    if (navigator.onLine) {
-        btnVisualizar.disabled = false;
-        btnVisualizar.title = "Abrir painel administrativo";
-    } else {
-        btnVisualizar.disabled = true;
-        btnVisualizar.title = "Disponível apenas online";
-    }
+  const btn = document.getElementById('btn-visualizar-todos');
+  if (!btn) return; // sai se não existir
+  if (navigator.onLine) {
+    btn.disabled = false;
+    btn.title = "Abrir painel administrativo";
+  } else {
+    btn.disabled = true;
+    btn.title = "Disponível apenas online";
+  }
 }
 
-btnVisualizar.addEventListener('click', () => {
+// Tenta adicionar evento diretamente se o botão existir
+if (btnVisualizar) {
+  btnVisualizar.addEventListener('click', () => {
     if (navigator.onLine) {
-        window.open('admin.html', '_blank');
+      window.open('admin.html', '_blank');
     } else {
-        alert("❌ Essa função só está disponível com conexão à internet.");
+      alert("❌ Essa função só está disponível com conexão à internet.");
     }
-});
+  });
+} else {
+  // Fallback: delegação de evento no container pai (garante que o clique seja capturado)
+  container.addEventListener('click', (ev) => {
+    const target = ev.target.closest && ev.target.closest('#btn-visualizar-todos');
+    if (target) {
+      if (navigator.onLine) {
+        window.open('admin.html', '_blank');
+      } else {
+        alert("❌ Essa função só está disponível com conexão à internet.");
+      }
+    }
+  });
+}
 
+// Atualiza estado quando mudam eventos de rede
 window.addEventListener('online', atualizarEstadoBotao);
 window.addEventListener('offline', atualizarEstadoBotao);
-atualizarEstadoBotao();
 
+// Chamada inicial (pode ser chamada até aqui porque atualiza com checagem de existência)
+atualizarEstadoBotao();
+	
     const lista = container.querySelector('#lista-formularios');
 
     try {
@@ -1541,7 +1563,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=28')
+                navigator.serviceWorker.register('./sw.js?v=29')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
