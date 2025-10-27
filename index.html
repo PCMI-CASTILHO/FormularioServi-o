@@ -1304,13 +1304,40 @@ container.innerHTML = `
         </span>
     </h2>
     <div id="lista-formularios" class="space-y-2"></div>
-	    <div class="text-center mt-4">
+	
+	<div class="text-center mt-4">
         <button onclick="window.open('admin.html', '_blank')" 
                 class="btn-primary px-6 py-2 rounded-lg">
             <i class="fas fa-eye mr-2"></i> Visualizar Todos
         </button>
     </div>
 `;
+
+	// === Ação do botão "Visualizar Todos" ===
+const btnVisualizar = document.getElementById('btn-visualizar-todos');
+
+// Desativa o botão se estiver offline
+function atualizarEstadoBotao() {
+    if (navigator.onLine) {
+        btnVisualizar.disabled = false;
+        btnVisualizar.title = "Abrir painel administrativo";
+    } else {
+        btnVisualizar.disabled = true;
+        btnVisualizar.title = "Disponível apenas online";
+    }
+}
+
+btnVisualizar.addEventListener('click', () => {
+    if (navigator.onLine) {
+        window.open('admin.html', '_blank');
+    } else {
+        alert("❌ Essa função só está disponível com conexão à internet.");
+    }
+});
+
+window.addEventListener('online', atualizarEstadoBotao);
+window.addEventListener('offline', atualizarEstadoBotao);
+atualizarEstadoBotao();
 
     const lista = container.querySelector('#lista-formularios');
 
@@ -1514,7 +1541,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=27')
+                navigator.serviceWorker.register('./sw.js?v=28')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
