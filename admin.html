@@ -6,6 +6,7 @@
   <title>Painel de Formulários - Selaves</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/simple-datatables@9.0.4" defer></script>
   <link rel="stylesheet" href="https://cdn.datatables.net/2.1.7/css/dataTables.tailwindcss.css">
   <script src="https://cdn.datatables.net/2.1.7/js/dataTables.min.js"></script>
 </head>
@@ -60,20 +61,36 @@
     </div>
   </div>
 
-  <script>
-    async function carregar() {
+<script>
+  async function carregar() {
+    try {
       const res = await fetch('https://vps.pesoexato.com/servico_list');
-      console.log("🔍 Resposta do servidor:", res);
       if (!res.ok) throw new Error(`Erro HTTP ${res.status}`);
-      
-      const dados = await res.json();
-      console.log("📦 Dados recebidos:", dados);
+
+      const dadosBrutos = await res.json();
+      console.log("📦 Dados recebidos do servidor:", dadosBrutos);
+
+      // Decodifica o JSON interno (json_dados)
+      const dados = dadosBrutos.map(item => {
+        const interno = JSON.parse(item.json_dados || "{}");
+        return {
+          id: item.id,
+          chave: item.chave,
+          dtalteracao: item.dtalteracao,
+          ...interno,
+          ...interno.formData // espalha os campos do formData também
+        };
+      });
+
+      console.log("✅ Dados tratados:", dados);
 
       // --- GRÁFICOS ---
       const tipos = {}, tecnicos = {};
       dados.forEach(f => {
-        tipos[f.servico] = (tipos[f.servico] || 0) + 1;
-        tecnicos[f.tecnico] = (tecnicos[f.tecnico] || 0) + 1;
+        const tipo = f.servico || 'OUTRO';
+        const tecnico = f.tecnico || f.tecnicoNome || 'Não informado';
+        tipos[tipo] = (tipos[tipo] || 0) + 1;
+        tecnicos[tecnico] = (tecnicos[tecnico] || 0) + 1;
       });
 
       new Chart(document.getElementById('grafico-servicos'), {
@@ -87,20 +104,22 @@
 
       // --- TABELA ---
       const tbody = document.querySelector('#tabela tbody');
+      tbody.innerHTML = '';
       dados.forEach(f => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${f.id}</td>
-          <td>${f.cliente}</td>
-          <td>${f.tecnico}</td>
-          <td>${f.servico}</td>
-          <td>${f.formData?.dataInicial || '-'}</td>
+          <td>${f.cliente || '-'}</td>
+          <td>${f.tecnico || f.tecnicoNome || '-'}</td>
+          <td>${f.servico || '-'}</td>
+          <td>${f.dataInicial || '-'}</td>
           <td><button class="text-blue-600 underline" onclick="abrirFicha(${f.id})">Ver</button></td>
         `;
         tbody.appendChild(tr);
       });
 
-      new DataTable('#tabela', {
+      // ✅ Corrigido: uso correto do simple-datatables
+      new simpleDatatables.DataTable('#tabela', {
         perPage: 10,
         labels: {
           placeholder: 'Buscar...',
@@ -111,41 +130,50 @@
       });
 
       window.formularios = dados;
+    } catch (erro) {
+      console.error("❌ Erro ao carregar dados:", erro);
+      document.body.innerHTML = `
+        <div class="text-center mt-20 text-red-600">
+          <h2 class="text-2xl font-bold mb-4">Falha ao carregar formulários</h2>
+          <p>${erro.message}</p>
+        </div>`;
     }
+  }
 
-    // --- Visualização detalhada ---
-    function abrirFicha(id) {
-      const f = window.formularios.find(x => x.id === id);
-      if (!f) return;
-      document.getElementById('modal').classList.remove('hidden');
-      document.getElementById('modal-titulo').innerText = `${f.servico} - ${f.cliente}`;
-      document.getElementById('modal-conteudo').innerHTML = `
-        <p><strong>Técnico:</strong> ${f.tecnico}</p>
-        <p><strong>Cidade:</strong> ${f.formData?.cidade}</p>
-        <p><strong>Equipamento:</strong> ${f.formData?.equipamento}</p>
-        <p><strong>Data Inicial:</strong> ${f.formData?.dataInicial} ${f.formData?.horaInicial}</p>
-        <p><strong>Data Final:</strong> ${f.formData?.dataFinal} ${f.formData?.horaFinal}</p>
-        <p><strong>Relatório:</strong><br>${f.formData?.relatorioMaquina}</p>
-      `;
-      document.getElementById('baixar-btn').onclick = () => baixarFicha(f);
-    }
+  // --- Visualização detalhada ---
+  function abrirFicha(id) {
+    const f = (window.formularios || []).find(x => x.id === id);
+    if (!f) return alert("Formulário não encontrado.");
 
-    document.getElementById('close-modal').onclick = () => 
-      document.getElementById('modal').classList.add('hidden');
+    document.getElementById('modal').classList.remove('hidden');
+    document.getElementById('modal-titulo').innerText = `${f.servico} - ${f.cliente}`;
+    document.getElementById('modal-conteudo').innerHTML = `
+      <p><strong>Técnico:</strong> ${f.tecnico || f.tecnicoNome}</p>
+      <p><strong>Cidade:</strong> ${f.cidade}</p>
+      <p><strong>Equipamento:</strong> ${f.equipamento}</p>
+      <p><strong>Data Inicial:</strong> ${f.dataInicial} ${f.horaInicial}</p>
+      <p><strong>Data Final:</strong> ${f.dataFinal} ${f.horaFinal}</p>
+      <p><strong>Relatório:</strong><br>${f.relatorioMaquina || '-'}</p>
+    `;
+    document.getElementById('baixar-btn').onclick = () => baixarFicha(f);
+  }
 
-    // --- Baixar como PDF ---
-    async function baixarFicha(f) {
-      const { jsPDF } = window.jspdf || await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-      const doc = new jsPDF();
-      doc.text(`Ficha de Serviço - ${f.cliente}`, 10, 10);
-      doc.text(`Técnico: ${f.tecnico}`, 10, 20);
-      doc.text(`Serviço: ${f.servico}`, 10, 30);
-      doc.text(`Relatório:`, 10, 40);
-      doc.text(f.formData?.relatorioMaquina || '', 10, 50);
-      doc.save(`servico_${f.id}.pdf`);
-    }
+  document.getElementById('close-modal').onclick = () => 
+    document.getElementById('modal').classList.add('hidden');
 
-    carregar();
-  </script>
+  // --- Baixar como PDF ---
+  async function baixarFicha(f) {
+    const { jsPDF } = window.jspdf || await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const doc = new jsPDF();
+    doc.text(`Ficha de Serviço - ${f.cliente}`, 10, 10);
+    doc.text(`Técnico: ${f.tecnico}`, 10, 20);
+    doc.text(`Serviço: ${f.servico}`, 10, 30);
+    doc.text(`Relatório:`, 10, 40);
+    doc.text(f.relatorioMaquina || '', 10, 50);
+    doc.save(`servico_${f.id}.pdf`);
+  }
+
+  carregar();
+</script>
 </body>
 </html>
