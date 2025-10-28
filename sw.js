@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-44';
+const CACHE_NAME = 'formulario-cache-45';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -237,6 +237,11 @@ async function sincronizarFormulariosEmBackground() {
                 },
                 chave: form.chaveUnica
             };
+
+            console.log('[SW] Enviando PDFs:', {
+              ficha: form.pdfFicha ? form.pdfFicha.length : 0,
+              relatorio: form.pdfRelatorio ? form.pdfRelatorio.length : 0
+            });
 
             // Anexa PDFs (se existirem)
             if (form.pdfFicha) {
