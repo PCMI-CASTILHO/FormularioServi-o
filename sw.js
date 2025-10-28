@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v39';
+const CACHE_NAME = 'formulario-cache-40';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -209,18 +209,38 @@ async function sincronizarFormulariosEmBackground() {
         
         console.log(`🔄 Sincronizando ${pendentes.length} formulários em background...`);
         
-        for (const form of pendentes) {
-            const payload = {
-                json_dados: {
-                    id: form.id,
-                    cliente: form.cliente,
-                    servico: form.servico,
-                    formData: form.formData,
-                    materiais: form.materiais,
-                    chaveUnica: form.chaveUnica
-                },
-                chave: form.chaveUnica
-            };
+        const payload = {
+    json_dados: {
+        id: form.id,
+        createdAt: form.createdAt || new Date().toISOString(),
+        cliente: dados.cliente || '',
+        tecnico: dados.tecnico || '',
+        servico: dados.servico || '',
+        cidade: dados.cidade || '',
+        equipamento: dados.equipamento || '',
+        numeroSerie: dados.numeroSerie || '',
+        dataInicial: dados.dataInicial || '',
+        dataFinal: dados.dataFinal || '',
+        horaInicial: dados.horaInicial || '',
+        horaFinal: dados.horaFinal || '',
+        veiculo: dados.veiculo || '',
+        estoque: dados.estoque || '',
+        relatorioMaquina: dados.relatorioMaquina || '',
+        materiais: Array.isArray(form.materiais) ? form.materiais : [],
+        hasFotos: Array.isArray(form.fotos) && form.fotos.length > 0,
+        hasAssinaturas: !!(form.assinaturas && (form.assinaturas.cliente || form.assinaturas.tecnico)),
+        chaveUnica: form.chaveUnica || ''
+    },
+    chave: form.chaveUnica
+};
+
+      if (form.pdfFicha) {
+    payload.json_dados.pdfFicha = form.pdfFicha;
+}
+if (form.pdfRelatorio) {
+    payload.json_dados.pdfRelatorio = form.pdfRelatorio;
+}
+
             
             const response = await fetch('https://vps.pesoexato.com/servico_set', {
                 method: 'POST',
