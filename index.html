@@ -1654,22 +1654,21 @@ async function salvarFormularioLocal() {
 
     const id = Date.now();
 
-    const registro = {
-        id: id, 
-        createdAt: new Date().toISOString(),
-        cliente: f.cliente || '',
-        servico: f.servico || '',
-        formData: f,
-        // Incluímos fotos e assinaturas.
-        fotos: state.fotos || [], 
-        materiais: state.materiais || [],
-        assinaturas: state.assinaturas || {},
-		sincronizado: false,
-		syncedAt: null,
-		chaveUnica: generateUniqueKey(),
-		pdfFicha: state.pdfFicha,
-		pdfRelatorio: state.pdfRelatorio
-    };
+	const registro = {
+	  id: Date.now(),
+	  createdAt: new Date().toISOString(),
+	  cliente: formData.cliente,
+	  tecnico: formData.tecnico,
+	  servico: formData.servico,
+	  formData,
+	  materiais: state.materiais,
+	  fotos: state.fotos,
+	  assinaturas: state.assinaturas,
+	  pdfFicha: state.pdfFicha || null,       // ✅ adiciona aqui
+	  pdfRelatorio: state.pdfRelatorio || null, // ✅ e aqui
+	  chaveUnica: generateUniqueKey(),
+	  sincronizado: false
+	};
 
     try {
     const db = await initDB();
@@ -1936,7 +1935,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=43')
+                navigator.serviceWorker.register('./sw.js?v=44')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
