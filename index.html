@@ -1090,6 +1090,24 @@ let syncBtn, syncBadge, syncIcon;
 
             return true;
         }
+
+		// 🔧 Reduz a imagem base64 para JPEG comprimido antes de inserir no PDF
+async function reduzirImagem(imgDataUrl, maxWidth = 800, quality = 0.6) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(maxWidth / img.width, 1);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = imgDataUrl;
+  });
+}
+
 		
 // ======== GERENCIAMENTO DE FORMULÁRIOS SALVOS (INDEXEDDB) ========
 
@@ -1250,24 +1268,6 @@ function formatDate(dateString) {
     const year = date.getFullYear();
     return `${day}/${month}/${year}`;
 }
-
-async function reduzirImagem(imgDataUrl, maxWidth = 1000, quality = 0.7) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const scale = Math.min(maxWidth / img.width, 1);
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      // converte para JPEG já comprimido
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.src = imgDataUrl;
-  });
-}
-
 
 // ======== FICHA DE MANUTENÇÃO ========
 async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
@@ -1959,7 +1959,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=51')
+                navigator.serviceWorker.register('./sw.js?v=52')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
