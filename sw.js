@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-40';
+const CACHE_NAME = 'formulario-cache-41';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -210,29 +210,29 @@ async function sincronizarFormulariosEmBackground() {
         console.log(`🔄 Sincronizando ${pendentes.length} formulários em background...`);
         
         const payload = {
-    json_dados: {
-        id: form.id,
-        createdAt: form.createdAt || new Date().toISOString(),
-        cliente: dados.cliente || '',
-        tecnico: dados.tecnico || '',
-        servico: dados.servico || '',
-        cidade: dados.cidade || '',
-        equipamento: dados.equipamento || '',
-        numeroSerie: dados.numeroSerie || '',
-        dataInicial: dados.dataInicial || '',
-        dataFinal: dados.dataFinal || '',
-        horaInicial: dados.horaInicial || '',
-        horaFinal: dados.horaFinal || '',
-        veiculo: dados.veiculo || '',
-        estoque: dados.estoque || '',
-        relatorioMaquina: dados.relatorioMaquina || '',
-        materiais: Array.isArray(form.materiais) ? form.materiais : [],
-        hasFotos: Array.isArray(form.fotos) && form.fotos.length > 0,
-        hasAssinaturas: !!(form.assinaturas && (form.assinaturas.cliente || form.assinaturas.tecnico)),
-        chaveUnica: form.chaveUnica || ''
-    },
-    chave: form.chaveUnica
-};
+          json_dados: {
+            id: form.id,
+            createdAt: form.createdAt || new Date().toISOString(),
+            cliente: dados.cliente || '',
+            tecnico: dados.tecnico || '',
+            servico: dados.servico || '',
+            cidade: dados.cidade || '',
+            equipamento: dados.equipamento || '',
+            numeroSerie: dados.numeroSerie || '',
+            dataInicial: dados.dataInicial || '',
+            dataFinal: dados.dataFinal || '',
+            horaInicial: dados.horaInicial || '',
+            horaFinal: dados.horaFinal || '',
+            veiculo: dados.veiculo || '',
+            estoque: dados.estoque || '',
+            relatorioMaquina: dados.relatorioMaquina || '',
+            materiais: Array.isArray(form.materiais) ? form.materiais : [],
+            hasFotos: Array.isArray(form.fotos) && form.fotos.length > 0,
+            hasAssinaturas: !!(form.assinaturas && (form.assinaturas.cliente || form.assinaturas.tecnico)),
+            chaveUnica: form.chaveUnica || ''
+          },
+          chave: form.chaveUnica
+        };
 
       if (form.pdfFicha) {
     payload.json_dados.pdfFicha = form.pdfFicha;
