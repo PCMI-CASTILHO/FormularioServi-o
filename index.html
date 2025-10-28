@@ -1227,9 +1227,14 @@ async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas)
     }
 
     try {
+        // Gera os dois PDFs e preenche state.pdfFicha / state.pdfRelatorio
         await gerarFichaPDF(formData, materiais, fotos, assinaturas);
         await gerarRelatorioPDF(formData, materiais, fotos, assinaturas);
-        showNotification("PDFs gerados com sucesso!", "success");
+
+        // ✅ Agora salva o formulário com os PDFs já incluídos
+        await salvarFormularioLocal(formData);
+
+        showNotification("PDFs gerados e formulário salvo com sucesso!", "success");
     } catch (e) {
         console.error("Erro ao gerar PDFs:", e);
         showNotification("Erro ao gerar PDFs", "error");
