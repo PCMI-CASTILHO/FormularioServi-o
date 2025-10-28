@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v37';
+const CACHE_NAME = 'formulario-cache-v38';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -222,7 +222,7 @@ async function sincronizarFormulariosEmBackground() {
                 chave: form.chaveUnica
             };
             
-            const response = await fetch('https://vps.pesoexato.com/servico/set', {
+            const response = await fetch('https://vps.pesoexato.com/servico_set', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
