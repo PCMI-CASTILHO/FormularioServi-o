@@ -1611,9 +1611,8 @@ async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
             }
             
             try {
-				const imgReduzida = await reduzirImagem(fotos[i].data, 800, 0.6);
+				const imgReduzida = await reduzirImagem(fotos[i].data, 900, 0.6);
 				doc.addImage(imgReduzida, 'JPEG', currentX, currentY, imgWidth, imgHeight, '', 'FAST');
-                doc.addImage(fotos[i].data, 'PNG', currentX, currentY, imgWidth, imgHeight);
             } catch (e) {
                 console.error('Erro ao adicionar imagem:', e);
             }
@@ -1960,7 +1959,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=50')
+                navigator.serviceWorker.register('./sw.js?v=51')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
