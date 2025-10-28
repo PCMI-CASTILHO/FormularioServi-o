@@ -1658,8 +1658,8 @@ async function salvarFormularioLocal() {
 	  id: id,
 	  createdAt: new Date().toISOString(),
 	  cliente: f.cliente,
-	  tecnico: formData.tecnico,
-	  servico: formData.servico,
+	  tecnico: f.tecnico,
+	  servico: f.servico,
 	  formData,
 	  materiais: state.materiais,
 	  fotos: state.fotos,
@@ -1935,7 +1935,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=46')
+                navigator.serviceWorker.register('./sw.js?v=47')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
