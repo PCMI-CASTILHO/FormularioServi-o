@@ -1218,15 +1218,18 @@ async function limparRegistrosAntigos(db) {
 
 // Salva o formulário no IndexedDB
 async function salvarFormularioLocal() {
-    // Estas funções precisam estar definidas no seu escopo global
-    // if (!validateForm()) return; 
-    // const f = collectFormData(); 
-
-    // **ASSUME-SE** que `validateForm()` e `collectFormData()` existem e são síncronas.
     if (!validateForm()) return;
     const f = collectFormData(); 
 
     const id = Date.now();
+    
+    // ✅ NOVO: Gerar os PDFs antes de salvar
+    const pdfs = await gerarPDFsAutomaticamente(f, state.materiais, state.fotos, state.assinaturas);
+    
+    if (!pdfs) {
+        showNotification('Erro ao gerar PDFs', 'error');
+        return;
+    }
 
     const registro = {
         id: id, 
@@ -1234,15 +1237,16 @@ async function salvarFormularioLocal() {
         cliente: f.cliente || '',
         servico: f.servico || '',
         formData: f,
-        // Incluímos fotos e assinaturas.
-        fotos: state.fotos || [], 
+        fotos: state.fotos || [],  // ✅ MANTIDO no IndexedDB
         materiais: state.materiais || [],
         assinaturas: state.assinaturas || {},
-		sincronizado: false,
-		syncedAt: null,
-		chaveUnica: generateUniqueKey()
+        fichaPdf: pdfs.fichaPdf,      // ✅ NOVO
+        relatorioPdf: pdfs.relatorioPdf,  // ✅ NOVO
+        sincronizado: false,
+        syncedAt: null,
+        chaveUnica: generateUniqueKey()
     };
-
+	
     try {
     const db = await initDB();
     
@@ -1508,7 +1512,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=35')
+                navigator.serviceWorker.register('./sw.js?v=36')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -1567,16 +1571,23 @@ async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas)
     if (!window.jspdf || !window.jspdf.jsPDF) {
         console.warn("jsPDF ainda não carregado, adiando geração...");
         setTimeout(() => gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas), 500);
-        return;
+        return null;  // ✅ Retornar null em caso de erro
     }
 
     try {
-        await gerarFichaPDF(formData, materiais, fotos, assinaturas);
-        await gerarRelatorioPDF(formData, materiais, fotos, assinaturas);
+        const fichaPdfBlob = await gerarFichaPDF(formData, materiais, fotos, assinaturas);
+        const relatorioPdfBlob = await gerarRelatorioPDF(formData, materiais, fotos, assinaturas);
+        
         showNotification("PDFs gerados com sucesso!", "success");
+        
+        return {
+            fichaPdf: fichaPdfBlob,
+            relatorioPdf: relatorioPdfBlob
+        };
     } catch (e) {
         console.error("Erro ao gerar PDFs:", e);
         showNotification("Erro ao gerar PDFs", "error");
+        return null;
     }
 }
 
@@ -1752,7 +1763,9 @@ async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
     doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
     doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
     
-    doc.save(`Ficha_Manutencao_${formData.cliente || 'ficha'}.pdf`);
+const pdfBlob = doc.output('blob');
+doc.save(`Ficha_Manutencao_${formData.cliente || 'ficha'}.pdf`); // download opcional
+return pdfBlob;
 }
 
 // ======== RELATÓRIO DE PRESTAÇÃO DE SERVIÇO ========
@@ -1980,8 +1993,10 @@ async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
     doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
     doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
     
-    const nome = (formData.cliente || 'relatorio').replace(/[^a-zA-Z0-9]/g, "_");
-    doc.save(`Relatorio_${nome}_${new Date().toISOString().split("T")[0]}.pdf`);
+const nome = (formData.cliente || 'relatorio').replace(/[^a-zA-Z0-9]/g, "_");
+const pdfBlob = doc.output('blob');
+doc.save(`Relatorio_${nome}_${new Date().toISOString().split("T")[0]}.pdf`); // download opcional
+return pdfBlob;
 }
 
 // ======== FUNÇÃO AUXILIAR PARA CARREGAR IMAGEM ========
@@ -2196,30 +2211,50 @@ async function attemptSync(isManual = false) {
 // ======== SINCRONIZAÇÃO INDIVIDUAL DE FORMULÁRIO ========
 async function syncSingleForm(form) {
     try {
-        const payload = {
-            json_dados: {
-                id: form.id,
-                createdAt: form.createdAt,
-                cliente: form.cliente,
-                servico: form.servico,
-                formData: form.formData,
-                materiais: form.materiais,
-                // Nota: Fotos e assinaturas são dados grandes, 
-                // pode ser necessário tratamento especial
-                hasFotos: form.fotos && form.fotos.length > 0,
-                hasAssinaturas: form.assinaturas && 
-                    (form.assinaturas.cliente || form.assinaturas.tecnico),
-				chaveUnica: form.chaveUnica
-            },
-            chave: form.chaveUnica
+        // ✅ USAR FormData para enviar arquivos
+        const formDataToSend = new FormData();
+        
+        // 1. Dados JSON (SEM fotos)
+        const jsonDados = {
+            id: form.id,
+            createdAt: form.createdAt,
+            cliente: form.formData.cliente,
+            tecnico: form.formData.tecnico,
+            servico: form.formData.servico,
+            cidade: form.formData.cidade,
+            equipamento: form.formData.equipamento,
+            numeroSerie: form.formData.numeroSerie,
+            dataInicial: form.formData.dataInicial,
+            dataFinal: form.formData.dataFinal,
+            horaInicial: form.formData.horaInicial,
+            horaFinal: form.formData.horaFinal,
+            veiculo: form.formData.veiculo,
+            estoque: form.formData.estoque,
+            relatorioMaquina: form.formData.relatorioMaquina,
+            materiais: form.materiais,
+            hasAssinaturas: form.assinaturas && 
+                (form.assinaturas.cliente || form.assinaturas.tecnico),
+            chaveUnica: form.chaveUnica
         };
         
+        formDataToSend.append('json_dados', JSON.stringify(jsonDados));
+        formDataToSend.append('chave', form.chaveUnica);
+        
+        // 2. Adicionar os PDFs
+        if (form.fichaPdf) {
+            formDataToSend.append('ficha_pdf', form.fichaPdf, 
+                `Ficha_${form.formData.cliente || 'cliente'}_${form.id}.pdf`);
+        }
+        
+        if (form.relatorioPdf) {
+            formDataToSend.append('relatorio_pdf', form.relatorioPdf, 
+                `Relatorio_${form.formData.cliente || 'cliente'}_${form.id}.pdf`);
+        }
+        
+        // 3. Enviar (sem Content-Type header - FormData define automaticamente)
         const response = await fetch(SYNC_CONFIG.endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload)
+            body: formDataToSend
         });
         
         if (!response.ok) {
