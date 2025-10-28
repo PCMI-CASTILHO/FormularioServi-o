@@ -1216,353 +1216,7 @@ async function limparRegistrosAntigos(db) {
     }
 }
 
-// Salva o formulário no IndexedDB
-async function salvarFormularioLocal() {
-    // Estas funções precisam estar definidas no seu escopo global
-    // if (!validateForm()) return; 
-    // const f = collectFormData(); 
-
-    // **ASSUME-SE** que `validateForm()` e `collectFormData()` existem e são síncronas.
-    if (!validateForm()) return;
-    const f = collectFormData(); 
-
-    const id = Date.now();
-
-    const registro = {
-        id: id, 
-        createdAt: new Date().toISOString(),
-        cliente: f.cliente || '',
-        servico: f.servico || '',
-        formData: f,
-        // Incluímos fotos e assinaturas.
-        fotos: state.fotos || [], 
-        materiais: state.materiais || [],
-        assinaturas: state.assinaturas || {},
-		sincronizado: false,
-		syncedAt: null,
-		chaveUnica: generateUniqueKey(),
-		pdfFicha: state.pdfFicha,
-		pdfRelatorio: state.pdfRelatorio
-    };
-
-    try {
-    const db = await initDB();
-    
-    // 1. Salva o novo registro no IndexedDB
-    await db.put(STORE_NAME, registro);
-
-    // ✅ REGISTRA BACKGROUND SYNC AQUI! (NOVA LINHA)
-    await registrarBackgroundSync();
-    
-    // Atualizar contagem de pendentes
-    await updatePendingCount();
-
-    // Tentar sincronizar automaticamente se online
-    if (navigator.onLine) {
-        setTimeout(() => attemptSync(), 1000);
-    }
-
-    showNotification('Formulário salvo localmente!', 'success');
-    
-    // 2. Renderiza a UI e garante a limpeza
-    await renderFormulariosSalvos();
-        
-        // 2. Renderiza a UI e garante a limpeza
-        await renderFormulariosSalvos();
-    } catch (e) {
-        console.error("Erro ao salvar no IndexedDB:", e);
-        // QuotaExceededError pode acontecer até no IndexedDB, mas é raro
-        showNotification('Erro: Falha ao salvar no armazenamento local. Verifique a cota.', 'error');
-    }
-}
-
-// Renderiza a seção de formulários salvos
-async function renderFormulariosSalvos() {
-    const containerId = 'formularios-salvos';
-    let container = document.getElementById(containerId);
-
-    if (!container) {
-        container = document.createElement('section');
-        container.id = containerId;
-        container.className = 'form-section';
-        // ASSUME-SE que document.querySelector('main') existe
-        const main = document.querySelector('main');
-        if (main) {
-            main.appendChild(container);
-        } else {
-            console.error("Elemento 'main' não encontrado. Não é possível renderizar a seção de salvos.");
-            return;
-        }
-    }
-	
-	
-
-    // Estrutura HTML
-container.innerHTML = `
-    <h2 class="text-xl font-semibold flex items-center">
-        <i class="fas fa-history text-blue-600 mr-2"></i> Formulários Salvos
-        <span class="ml-2 text-sm bg-gray-200 text-gray-700 px-2 py-1 rounded-full">
-            ${syncState.pendingCount} pendente(s)
-        </span>
-    </h2>
-    <div id="lista-formularios" class="space-y-2"></div>
-`;
-
-    const lista = container.querySelector('#lista-formularios');
-
-    try {
-        const db = await initDB();
-
-        // Faz a limpeza antes de ler a lista
-        await limparRegistrosAntigos(db);
-
-        // Obtém todos os registros do IndexedDB
-        let registros = await db.getAll(STORE_NAME);
-        
-        // Ordenar pelo ID (mais novo primeiro)
-        registros.sort((a, b) => b.id - a.id); 
-
-        if (registros.length === 0) {
-            lista.innerHTML = `<p class="text-gray-500 text-sm">Nenhum formulário salvo nas últimas 24h.</p>`;
-            return;
-        }
-
-        // Renderiza os itens na lista
-registros.forEach(registro => {
-    const dataLegivel = new Date(registro.id).toLocaleString();
-    const statusIcon = registro.sincronizado 
-        ? '<i class="fas fa-check-circle text-green-500" title="Sincronizado"></i>'
-        : '<i class="fas fa-clock text-yellow-500" title="Pendente de sincronização"></i>';
-    
-    const item = document.createElement('div');
-    item.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-lg shadow-sm';
-    item.innerHTML = `
-        <div class="flex items-center">
-            ${statusIcon}
-            <div class="ml-2">
-                <div class="font-medium text-gray-800">${registro.cliente || '—'}</div>
-                <div class="text-sm text-gray-500">${registro.servico || '—'} • ${dataLegivel}</div>
-            </div>
-        </div>
-        <div class="flex space-x-2">
-            <button class="btn-secondary px-3 py-1 rounded edit-btn" data-id="${registro.id}">
-                <i class="fas fa-edit"></i> Editar
-            </button>
-            <button class="btn-secondary px-3 py-1 rounded text-red-600 delete-btn" data-id="${registro.id}">
-                <i class="fas fa-trash"></i>
-            </button>
-        </div>
-    `;
-    lista.appendChild(item);
-});
-
-        // Delegação dos eventos - DEVE SER FEITA APÓS INSERIR OS ITENS NA LISTA
-        lista.querySelectorAll('.edit-btn').forEach(btn => {
-            btn.addEventListener('click', e => {
-                const id = e.currentTarget.dataset.id;
-                carregarFormularioLocal(id); 
-            });
-        });
-
-        lista.querySelectorAll('.delete-btn').forEach(btn => {
-            btn.addEventListener('click', e => {
-                const id = e.currentTarget.dataset.id;
-                removerFormularioLocal(id);
-            });
-        });
-
-    } catch (e) {
-        console.error("Erro fatal ao renderizar formulários do IndexedDB:", e);
-        lista.innerHTML = `<p class="text-red-500 text-sm">Erro ao carregar lista de formulários. (Verifique a console.)</p>`;
-    }
-}
-
-// Carrega um formulário salvo (popula inputs, materiais, fotos e assinaturas)
-async function carregarFormularioLocal(id) {
-    try {
-        const db = await initDB();
-        // 'get' busca um registro pela chave primária (id)
-        const registro = await db.get(STORE_NAME, Number(id)); 
-
-        if (!registro) {
-            showNotification('Registro não encontrado', 'error');
-            return;
-        }
-
-        const f = registro.formData || {};
-
-        // 1. Preencher campos usando o mapa (LÓGICA MANTIDA)
-        for (const key in FIELD_ID_MAP) {
-            const elId = FIELD_ID_MAP[key];
-            const el = document.getElementById(elId);
-            if (!el) continue;
-
-            const val = f[key] !== undefined ? f[key] : '';
-            if (el.tagName === 'SELECT' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-                el.value = val;
-                // trigger change visual 
-                if (elId === 'equipamento') {
-                    // Assume-se que 'equipamentoOutro' está definido globalmente
-                    equipamentoOutro.classList.toggle('hidden', el.value !== 'OUTRO'); 
-                }
-            }
-        }
-
-        // 2. Restaurar materiais e fotos no state e na UI
-        // ASSUME-SE que 'state' e 'renderMateriais/renderPhotos' estão definidos globalmente
-        state.materiais = registro.materiais ? JSON.parse(JSON.stringify(registro.materiais)) : [];
-        renderMateriais(); 
-
-        state.fotos = registro.fotos ? JSON.parse(JSON.stringify(registro.fotos)) : [];
-        renderPhotos(); 
-
-        // 3. Restaurar assinaturas
-        // ASSUME-SE que 'canvasCliente/ctxCliente/etc.' estão definidos globalmente
-        state.assinaturas = registro.assinaturas || { cliente: null, tecnico: null };
-        if (state.assinaturas.cliente) {
-            drawDataUrlOnCanvas(state.assinaturas.cliente, canvasCliente, ctxCliente);
-        } else {
-            ctxCliente.clearRect(0, 0, canvasCliente.width, canvasCliente.height);
-        }
-        if (state.assinaturas.tecnico) {
-            drawDataUrlOnCanvas(state.assinaturas.tecnico, canvasTecnico, ctxTecnico);
-        } else {
-            ctxTecnico.clearRect(0, 0, canvasTecnico.width, canvasTecnico.height);
-        }
-
-        showNotification('Formulário carregado para edição.', 'info');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (e) {
-        console.error("Erro ao carregar registro do IndexedDB:", e);
-        showNotification('Erro ao carregar formulário.', 'error');
-    }
-}
-
-// Remove um formulário salvo
-async function removerFormularioLocal(id) {
-    try {
-        const db = await initDB();
-        // 'delete' remove o registro pela chave primária (id)
-        await db.delete(STORE_NAME, Number(id));
-
-        showNotification('Formulário excluído.', 'info');
-        await renderFormulariosSalvos(); // Renderiza a UI após a exclusão
-    } catch (e) {
-        console.error("Erro ao remover do IndexedDB:", e);
-        showNotification('Erro ao excluir formulário.', 'error');
-    }
-}
-
-// Helper: desenha um dataURL em um canvas mantendo proporção
-function drawDataUrlOnCanvas(dataUrl, canvas, ctx) {
-    const img = new Image();
-    img.onload = () => {
-        // Limpa canvas e desenha centrado/escalado
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        // ajustar resolução do canvas para evitar distorção em retina
-        // (supondo que canvas já tenha tamanho no CSS, ajustamos o tamanho real)
-        const ratio = window.devicePixelRatio || 1;
-        if (canvas.width !== canvas.clientWidth * ratio) {
-            canvas.width = canvas.clientWidth * ratio;
-            canvas.height = canvas.clientHeight * ratio;
-            ctx.scale(ratio, ratio);
-            ctx.lineWidth = 2;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.strokeStyle = '#000';
-        }
-        // desenhar
-        ctx.drawImage(img, 0, 0, canvas.clientWidth, canvas.clientHeight);
-    };
-    img.src = dataUrl;
-}
-
-// =======================================================
-// NOVO PONTO DE INÍCIO: Garante que o DB seja inicializado
-// =======================================================
-
-async function startApp() {
-    try {
-        // Inicializar banco de dados com tratamento de erro específico
-        try {
-            await initDB();
-        } catch (dbError) {
-            console.error('Erro crítico no banco de dados:', dbError);
-            // Tenta recriar o banco de dados
-            await recriarBancoDados();
-        }
-        
-        // Inicializar sistema de sincronização
-        initSync();
-        
-        // Renderizar formulários salvos
-        await renderFormulariosSalvos();
-        
-        // Resto das configurações...
-        updateOnlineStatus();
-        window.addEventListener('online', updateOnlineStatus);
-        window.addEventListener('offline', updateOnlineStatus);
-        setupEventListeners();
-        setupSignatureCanvas(canvasCliente, ctxCliente, 'cliente');
-        setupSignatureCanvas(canvasTecnico, ctxTecnico, 'tecnico');
-        populateMaterialsDatalist();
-
-        // Registrar Service Worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=42')
-                    .then(reg => {
-                        console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
-                    })
-                    .catch(error => {
-                        console.error('Falha no registro do Service Worker:', error);
-                    });
-            });
-        }
-        
-    } catch (error) {
-        console.error("Falha ao iniciar a aplicação:", error);
-        showNotification('Erro ao inicializar aplicação. Recarregue a página.', 'error');
-    }
-}
-
-// Função para recriar o banco em caso de erro
-async function recriarBancoDados() {
-    try {
-        console.log('Tentando recriar banco de dados...');
-        // Fecha conexão existente
-        if (dbPromise) {
-            const db = await dbPromise;
-            db.close();
-            dbPromise = null;
-        }
-        
-        // Deleta o banco existente
-        await idb.deleteDB(DB_NAME);
-        console.log('Banco antigo deletado');
-        
-        // Recria o banco
-        await initDB();
-        console.log('Novo banco criado com sucesso');
-        
-    } catch (error) {
-        console.error('Falha ao recriar banco de dados:', error);
-        throw error;
-    }
-}
-
-// Substitui o listener antigo: Inicia a aplicação após o DOM carregar
-document.addEventListener('DOMContentLoaded', startApp);
-
-// O listener do botão de exportação (MANTIDO)
-// ASSUME-SE que 'exportBtn' está definido globalmente
-exportBtn.addEventListener('click', function(e) {
-    // salvar local antes de exportar
-    salvarFormularioLocal();
-    // continue com a rotina existente de export...
-});
-
-// ======== GERADOR DE PDF (FORMATAÇÃO ORIGINAL DO GERADOR PDF.html) ========
+		// ======== GERADOR DE PDF (FORMATAÇÃO ORIGINAL DO GERADOR PDF.html) ========
 
 // Garante que o jsPDF foi carregado antes de gerar
 async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas) {
@@ -1987,6 +1641,352 @@ async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
     doc.save(`Relatorio_${nome}_${new Date().toISOString().split("T")[0]}.pdf`);
 	state.pdfRelatorio = doc.output('datauristring');
 }
+
+// Salva o formulário no IndexedDB
+async function salvarFormularioLocal() {
+    // Estas funções precisam estar definidas no seu escopo global
+    // if (!validateForm()) return; 
+    // const f = collectFormData(); 
+
+    // **ASSUME-SE** que `validateForm()` e `collectFormData()` existem e são síncronas.
+    if (!validateForm()) return;
+    const f = collectFormData(); 
+
+    const id = Date.now();
+
+    const registro = {
+        id: id, 
+        createdAt: new Date().toISOString(),
+        cliente: f.cliente || '',
+        servico: f.servico || '',
+        formData: f,
+        // Incluímos fotos e assinaturas.
+        fotos: state.fotos || [], 
+        materiais: state.materiais || [],
+        assinaturas: state.assinaturas || {},
+		sincronizado: false,
+		syncedAt: null,
+		chaveUnica: generateUniqueKey(),
+		pdfFicha: state.pdfFicha,
+		pdfRelatorio: state.pdfRelatorio
+    };
+
+    try {
+    const db = await initDB();
+    
+    // 1. Salva o novo registro no IndexedDB
+    await db.put(STORE_NAME, registro);
+
+    // ✅ REGISTRA BACKGROUND SYNC AQUI! (NOVA LINHA)
+    await registrarBackgroundSync();
+    
+    // Atualizar contagem de pendentes
+    await updatePendingCount();
+
+    // Tentar sincronizar automaticamente se online
+    if (navigator.onLine) {
+        setTimeout(() => attemptSync(), 1000);
+    }
+
+    showNotification('Formulário salvo localmente!', 'success');
+    
+    // 2. Renderiza a UI e garante a limpeza
+    await renderFormulariosSalvos();
+        
+        // 2. Renderiza a UI e garante a limpeza
+        await renderFormulariosSalvos();
+    } catch (e) {
+        console.error("Erro ao salvar no IndexedDB:", e);
+        // QuotaExceededError pode acontecer até no IndexedDB, mas é raro
+        showNotification('Erro: Falha ao salvar no armazenamento local. Verifique a cota.', 'error');
+    }
+}
+
+// Renderiza a seção de formulários salvos
+async function renderFormulariosSalvos() {
+    const containerId = 'formularios-salvos';
+    let container = document.getElementById(containerId);
+
+    if (!container) {
+        container = document.createElement('section');
+        container.id = containerId;
+        container.className = 'form-section';
+        // ASSUME-SE que document.querySelector('main') existe
+        const main = document.querySelector('main');
+        if (main) {
+            main.appendChild(container);
+        } else {
+            console.error("Elemento 'main' não encontrado. Não é possível renderizar a seção de salvos.");
+            return;
+        }
+    }
+	
+	
+
+    // Estrutura HTML
+container.innerHTML = `
+    <h2 class="text-xl font-semibold flex items-center">
+        <i class="fas fa-history text-blue-600 mr-2"></i> Formulários Salvos
+        <span class="ml-2 text-sm bg-gray-200 text-gray-700 px-2 py-1 rounded-full">
+            ${syncState.pendingCount} pendente(s)
+        </span>
+    </h2>
+    <div id="lista-formularios" class="space-y-2"></div>
+`;
+
+    const lista = container.querySelector('#lista-formularios');
+
+    try {
+        const db = await initDB();
+
+        // Faz a limpeza antes de ler a lista
+        await limparRegistrosAntigos(db);
+
+        // Obtém todos os registros do IndexedDB
+        let registros = await db.getAll(STORE_NAME);
+        
+        // Ordenar pelo ID (mais novo primeiro)
+        registros.sort((a, b) => b.id - a.id); 
+
+        if (registros.length === 0) {
+            lista.innerHTML = `<p class="text-gray-500 text-sm">Nenhum formulário salvo nas últimas 24h.</p>`;
+            return;
+        }
+
+        // Renderiza os itens na lista
+registros.forEach(registro => {
+    const dataLegivel = new Date(registro.id).toLocaleString();
+    const statusIcon = registro.sincronizado 
+        ? '<i class="fas fa-check-circle text-green-500" title="Sincronizado"></i>'
+        : '<i class="fas fa-clock text-yellow-500" title="Pendente de sincronização"></i>';
+    
+    const item = document.createElement('div');
+    item.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-lg shadow-sm';
+    item.innerHTML = `
+        <div class="flex items-center">
+            ${statusIcon}
+            <div class="ml-2">
+                <div class="font-medium text-gray-800">${registro.cliente || '—'}</div>
+                <div class="text-sm text-gray-500">${registro.servico || '—'} • ${dataLegivel}</div>
+            </div>
+        </div>
+        <div class="flex space-x-2">
+            <button class="btn-secondary px-3 py-1 rounded edit-btn" data-id="${registro.id}">
+                <i class="fas fa-edit"></i> Editar
+            </button>
+            <button class="btn-secondary px-3 py-1 rounded text-red-600 delete-btn" data-id="${registro.id}">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `;
+    lista.appendChild(item);
+});
+
+        // Delegação dos eventos - DEVE SER FEITA APÓS INSERIR OS ITENS NA LISTA
+        lista.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                const id = e.currentTarget.dataset.id;
+                carregarFormularioLocal(id); 
+            });
+        });
+
+        lista.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                const id = e.currentTarget.dataset.id;
+                removerFormularioLocal(id);
+            });
+        });
+
+    } catch (e) {
+        console.error("Erro fatal ao renderizar formulários do IndexedDB:", e);
+        lista.innerHTML = `<p class="text-red-500 text-sm">Erro ao carregar lista de formulários. (Verifique a console.)</p>`;
+    }
+}
+
+// Carrega um formulário salvo (popula inputs, materiais, fotos e assinaturas)
+async function carregarFormularioLocal(id) {
+    try {
+        const db = await initDB();
+        // 'get' busca um registro pela chave primária (id)
+        const registro = await db.get(STORE_NAME, Number(id)); 
+
+        if (!registro) {
+            showNotification('Registro não encontrado', 'error');
+            return;
+        }
+
+        const f = registro.formData || {};
+
+        // 1. Preencher campos usando o mapa (LÓGICA MANTIDA)
+        for (const key in FIELD_ID_MAP) {
+            const elId = FIELD_ID_MAP[key];
+            const el = document.getElementById(elId);
+            if (!el) continue;
+
+            const val = f[key] !== undefined ? f[key] : '';
+            if (el.tagName === 'SELECT' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                el.value = val;
+                // trigger change visual 
+                if (elId === 'equipamento') {
+                    // Assume-se que 'equipamentoOutro' está definido globalmente
+                    equipamentoOutro.classList.toggle('hidden', el.value !== 'OUTRO'); 
+                }
+            }
+        }
+
+        // 2. Restaurar materiais e fotos no state e na UI
+        // ASSUME-SE que 'state' e 'renderMateriais/renderPhotos' estão definidos globalmente
+        state.materiais = registro.materiais ? JSON.parse(JSON.stringify(registro.materiais)) : [];
+        renderMateriais(); 
+
+        state.fotos = registro.fotos ? JSON.parse(JSON.stringify(registro.fotos)) : [];
+        renderPhotos(); 
+
+        // 3. Restaurar assinaturas
+        // ASSUME-SE que 'canvasCliente/ctxCliente/etc.' estão definidos globalmente
+        state.assinaturas = registro.assinaturas || { cliente: null, tecnico: null };
+        if (state.assinaturas.cliente) {
+            drawDataUrlOnCanvas(state.assinaturas.cliente, canvasCliente, ctxCliente);
+        } else {
+            ctxCliente.clearRect(0, 0, canvasCliente.width, canvasCliente.height);
+        }
+        if (state.assinaturas.tecnico) {
+            drawDataUrlOnCanvas(state.assinaturas.tecnico, canvasTecnico, ctxTecnico);
+        } else {
+            ctxTecnico.clearRect(0, 0, canvasTecnico.width, canvasTecnico.height);
+        }
+
+        showNotification('Formulário carregado para edição.', 'info');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) {
+        console.error("Erro ao carregar registro do IndexedDB:", e);
+        showNotification('Erro ao carregar formulário.', 'error');
+    }
+}
+
+// Remove um formulário salvo
+async function removerFormularioLocal(id) {
+    try {
+        const db = await initDB();
+        // 'delete' remove o registro pela chave primária (id)
+        await db.delete(STORE_NAME, Number(id));
+
+        showNotification('Formulário excluído.', 'info');
+        await renderFormulariosSalvos(); // Renderiza a UI após a exclusão
+    } catch (e) {
+        console.error("Erro ao remover do IndexedDB:", e);
+        showNotification('Erro ao excluir formulário.', 'error');
+    }
+}
+
+// Helper: desenha um dataURL em um canvas mantendo proporção
+function drawDataUrlOnCanvas(dataUrl, canvas, ctx) {
+    const img = new Image();
+    img.onload = () => {
+        // Limpa canvas e desenha centrado/escalado
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // ajustar resolução do canvas para evitar distorção em retina
+        // (supondo que canvas já tenha tamanho no CSS, ajustamos o tamanho real)
+        const ratio = window.devicePixelRatio || 1;
+        if (canvas.width !== canvas.clientWidth * ratio) {
+            canvas.width = canvas.clientWidth * ratio;
+            canvas.height = canvas.clientHeight * ratio;
+            ctx.scale(ratio, ratio);
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#000';
+        }
+        // desenhar
+        ctx.drawImage(img, 0, 0, canvas.clientWidth, canvas.clientHeight);
+    };
+    img.src = dataUrl;
+}
+
+// =======================================================
+// NOVO PONTO DE INÍCIO: Garante que o DB seja inicializado
+// =======================================================
+
+async function startApp() {
+    try {
+        // Inicializar banco de dados com tratamento de erro específico
+        try {
+            await initDB();
+        } catch (dbError) {
+            console.error('Erro crítico no banco de dados:', dbError);
+            // Tenta recriar o banco de dados
+            await recriarBancoDados();
+        }
+        
+        // Inicializar sistema de sincronização
+        initSync();
+        
+        // Renderizar formulários salvos
+        await renderFormulariosSalvos();
+        
+        // Resto das configurações...
+        updateOnlineStatus();
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        setupEventListeners();
+        setupSignatureCanvas(canvasCliente, ctxCliente, 'cliente');
+        setupSignatureCanvas(canvasTecnico, ctxTecnico, 'tecnico');
+        populateMaterialsDatalist();
+
+        // Registrar Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js?v=42')
+                    .then(reg => {
+                        console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
+                    })
+                    .catch(error => {
+                        console.error('Falha no registro do Service Worker:', error);
+                    });
+            });
+        }
+        
+    } catch (error) {
+        console.error("Falha ao iniciar a aplicação:", error);
+        showNotification('Erro ao inicializar aplicação. Recarregue a página.', 'error');
+    }
+}
+
+// Função para recriar o banco em caso de erro
+async function recriarBancoDados() {
+    try {
+        console.log('Tentando recriar banco de dados...');
+        // Fecha conexão existente
+        if (dbPromise) {
+            const db = await dbPromise;
+            db.close();
+            dbPromise = null;
+        }
+        
+        // Deleta o banco existente
+        await idb.deleteDB(DB_NAME);
+        console.log('Banco antigo deletado');
+        
+        // Recria o banco
+        await initDB();
+        console.log('Novo banco criado com sucesso');
+        
+    } catch (error) {
+        console.error('Falha ao recriar banco de dados:', error);
+        throw error;
+    }
+}
+
+// Substitui o listener antigo: Inicia a aplicação após o DOM carregar
+document.addEventListener('DOMContentLoaded', startApp);
+
+// O listener do botão de exportação (MANTIDO)
+// ASSUME-SE que 'exportBtn' está definido globalmente
+exportBtn.addEventListener('click', function(e) {
+    // salvar local antes de exportar
+    salvarFormularioLocal();
+    // continue com a rotina existente de export...
+});
 
 // ======== FUNÇÃO AUXILIAR PARA CARREGAR IMAGEM ========
 function carregarImagem(src) {
