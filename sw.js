@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-41';
+const CACHE_NAME = 'formulario-cache-42';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -202,46 +202,51 @@ self.addEventListener('sync', (event) => {
 
 async function sincronizarFormulariosEmBackground() {
     try {
-        // Abre o banco - isso funciona em background!
+        // Abre o banco
         const db = await idb.openDB('FormulariosDB', 4);
         const todosForms = await db.getAll('formularios');
         const pendentes = todosForms.filter(f => !f.sincronizado);
         
         console.log(`🔄 Sincronizando ${pendentes.length} formulários em background...`);
         
-        const payload = {
-          json_dados: {
-            id: form.id,
-            createdAt: form.createdAt || new Date().toISOString(),
-            cliente: dados.cliente || '',
-            tecnico: dados.tecnico || '',
-            servico: dados.servico || '',
-            cidade: dados.cidade || '',
-            equipamento: dados.equipamento || '',
-            numeroSerie: dados.numeroSerie || '',
-            dataInicial: dados.dataInicial || '',
-            dataFinal: dados.dataFinal || '',
-            horaInicial: dados.horaInicial || '',
-            horaFinal: dados.horaFinal || '',
-            veiculo: dados.veiculo || '',
-            estoque: dados.estoque || '',
-            relatorioMaquina: dados.relatorioMaquina || '',
-            materiais: Array.isArray(form.materiais) ? form.materiais : [],
-            hasFotos: Array.isArray(form.fotos) && form.fotos.length > 0,
-            hasAssinaturas: !!(form.assinaturas && (form.assinaturas.cliente || form.assinaturas.tecnico)),
-            chaveUnica: form.chaveUnica || ''
-          },
-          chave: form.chaveUnica
-        };
+        for (const form of pendentes) {
+            const dados = form.formData || {};
 
-      if (form.pdfFicha) {
-    payload.json_dados.pdfFicha = form.pdfFicha;
-}
-if (form.pdfRelatorio) {
-    payload.json_dados.pdfRelatorio = form.pdfRelatorio;
-}
+            // Monta o payload limpo (sem fotos/assinaturas)
+            const payload = {
+                json_dados: {
+                    id: form.id,
+                    createdAt: form.createdAt || new Date().toISOString(),
+                    cliente: dados.cliente || '',
+                    tecnico: dados.tecnico || '',
+                    servico: dados.servico || '',
+                    cidade: dados.cidade || '',
+                    equipamento: dados.equipamento || '',
+                    numeroSerie: dados.numeroSerie || '',
+                    dataInicial: dados.dataInicial || '',
+                    dataFinal: dados.dataFinal || '',
+                    horaInicial: dados.horaInicial || '',
+                    horaFinal: dados.horaFinal || '',
+                    veiculo: dados.veiculo || '',
+                    estoque: dados.estoque || '',
+                    relatorioMaquina: dados.relatorioMaquina || '',
+                    materiais: Array.isArray(form.materiais) ? form.materiais : [],
+                    hasFotos: Array.isArray(form.fotos) && form.fotos.length > 0,
+                    hasAssinaturas: !!(form.assinaturas && (form.assinaturas.cliente || form.assinaturas.tecnico)),
+                    chaveUnica: form.chaveUnica || ''
+                },
+                chave: form.chaveUnica
+            };
 
-            
+            // Anexa PDFs (se existirem)
+            if (form.pdfFicha) {
+                payload.json_dados.pdfFicha = form.pdfFicha;
+            }
+            if (form.pdfRelatorio) {
+                payload.json_dados.pdfRelatorio = form.pdfRelatorio;
+            }
+
+            // Envia ao servidor
             const response = await fetch('https://vps.pesoexato.com/servico_set', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -253,6 +258,8 @@ if (form.pdfRelatorio) {
                 form.syncedAt = new Date().toISOString();
                 await db.put('formularios', form);
                 console.log(`✅ Formulário ${form.id} sincronizado em background`);
+            } else {
+                console.warn(`⚠️ Falha ao sincronizar formulário ${form.id}: ${response.status}`);
             }
         }
     } catch (error) {
