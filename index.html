@@ -1672,60 +1672,52 @@ async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
 
 // Salva o formulário no IndexedDB
 async function salvarFormularioLocal() {
-    // Estas funções precisam estar definidas no seu escopo global
-    // if (!validateForm()) return; 
-    // const f = collectFormData(); 
-
-    // **ASSUME-SE** que `validateForm()` e `collectFormData()` existem e são síncronas.
     if (!validateForm()) return;
     const f = collectFormData(); 
 
     const id = Date.now();
 
-	const registro = {
-	  id: id,
-	  createdAt: new Date().toISOString(),
-	  cliente: f.cliente,
-	  tecnico: f.tecnico,
-	  servico: f.servico,
-	  formData: f,
-	  materiais: state.materiais,
-	  fotos: state.fotos,
-	  assinaturas: state.assinaturas,
-	  pdfFicha: state.pdfFicha || null,       // ✅ adiciona aqui
-	  pdfRelatorio: state.pdfRelatorio || null, // ✅ e aqui
-	  chaveUnica: generateUniqueKey(),
-	  sincronizado: false
-	};
+    const registro = {
+      id: id,
+      createdAt: new Date().toISOString(),
+      cliente: f.cliente,
+      tecnico: f.tecnico,
+      servico: f.servico,
+      formData: f,
+      materiais: state.materiais,
+      fotos: state.fotos,
+      assinaturas: state.assinaturas,
+      pdfFicha: state.pdfFicha || null,
+      pdfRelatorio: state.pdfRelatorio || null,
+      chaveUnica: generateUniqueKey(),
+      sincronizado: false
+    };
+
+    // VERIFICAÇÃO DOS PDFs
+    console.log('💾 Salvando no IndexedDB:', {
+        temPDFFicha: !!state.pdfFicha,
+        temPDFRelatorio: !!state.pdfRelatorio,
+        tamanhoFicha: state.pdfFicha ? state.pdfFicha.length : 0,
+        tamanhoRelatorio: state.pdfRelatorio ? state.pdfRelatorio.length : 0
+    });
 
     try {
-    const db = await initDB();
-    
-    // 1. Salva o novo registro no IndexedDB
-    await db.put(STORE_NAME, registro);
+        const db = await initDB();
+        await db.put(STORE_NAME, registro);
+        await registrarBackgroundSync();
+        await updatePendingCount();
 
-    // ✅ REGISTRA BACKGROUND SYNC AQUI! (NOVA LINHA)
-    await registrarBackgroundSync();
-    
-    // Atualizar contagem de pendentes
-    await updatePendingCount();
-
-    // Tentar sincronizar automaticamente se online
-    if (navigator.onLine) {
-        setTimeout(() => attemptSync(), 1000);
-    }
-
-    showNotification('Formulário salvo localmente!', 'success');
-    
-    // 2. Renderiza a UI e garante a limpeza
-    await renderFormulariosSalvos();
-        
-        // 2. Renderiza a UI e garante a limpeza
+        showNotification('Formulário salvo localmente!', 'success');
         await renderFormulariosSalvos();
+        
+        // Tentar sincronizar automaticamente se online
+        if (navigator.onLine) {
+            setTimeout(() => attemptSync(), 1000);
+        }
+        
     } catch (e) {
         console.error("Erro ao salvar no IndexedDB:", e);
-        // QuotaExceededError pode acontecer até no IndexedDB, mas é raro
-        showNotification('Erro: Falha ao salvar no armazenamento local. Verifique a cota.', 'error');
+        showNotification('Erro: Falha ao salvar no armazenamento local.', 'error');
     }
 }
 
@@ -1963,7 +1955,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=53')
+                navigator.serviceWorker.register('./sw.js?v=54')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -2257,23 +2249,25 @@ async function syncSingleForm(form) {
             // Remove o prefixo data URL se existir, mantém apenas o base64
             const pdfFichaBase64 = form.pdfFicha.replace(/^data:application\/pdf;base64,/, '');
             jsonDados.pdfFicha = pdfFichaBase64;
+            console.log('📄 PDF Ficha preparado, tamanho:', pdfFichaBase64.length);
         }
         
         if (form.pdfRelatorio) {
             const pdfRelatorioBase64 = form.pdfRelatorio.replace(/^data:application\/pdf;base64,/, '');
             jsonDados.pdfRelatorio = pdfRelatorioBase64;
+            console.log('📄 PDF Relatório preparado, tamanho:', pdfRelatorioBase64.length);
         }
 
+        // CORREÇÃO: Envia o objeto diretamente, sem stringify duplo
         const payload = {
-            json_dados: JSON.stringify(jsonDados), // Stringify aqui para manter compatibilidade
+            json_dados: jsonDados, // ENVIA O OBJETO DIRETAMENTE
             chave: form.chaveUnica || ''
         };
 
-        console.log('Enviando para servidor:', {
+        console.log('📤 Enviando para servidor:', {
             temPDFFicha: !!form.pdfFicha,
             temPDFRelatorio: !!form.pdfRelatorio,
-            tamanhoFicha: form.pdfFicha ? form.pdfFicha.length : 0,
-            tamanhoRelatorio: form.pdfRelatorio ? form.pdfRelatorio.length : 0
+            payload: payload
         });
 
         const response = await fetch(endpoint, {
@@ -2287,15 +2281,16 @@ async function syncSingleForm(form) {
         if (!response.ok) {
             let texto = '';
             try { texto = await response.text(); } catch(e) { texto = ''; }
+            console.error('❌ Erro na resposta:', response.status, texto);
             throw new Error(`HTTP ${response.status}: ${response.statusText} ${texto}`);
         }
 
         const result = await response.json().catch(() => null);
-        console.log('Formulário sincronizado:', form.id, result);
+        console.log('✅ Formulário sincronizado:', form.id, result);
 
         return true;
     } catch (error) {
-        console.error('Erro ao sincronizar formulário:', error);
+        console.error('❌ Erro ao sincronizar formulário:', error);
         return false;
     }
 }
