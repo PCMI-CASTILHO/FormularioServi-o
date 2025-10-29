@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v53';
+const CACHE_NAME = 'formulario-cache-v54';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -236,22 +236,22 @@ async function sincronizarFormulariosEmBackground() {
             if (form.pdfFicha) {
                 const pdfFichaBase64 = form.pdfFicha.replace(/^data:application\/pdf;base64,/, '');
                 jsonDados.pdfFicha = pdfFichaBase64;
+                console.log('[SW] PDF Ficha anexado, tamanho:', pdfFichaBase64.length);
             }
             
             if (form.pdfRelatorio) {
                 const pdfRelatorioBase64 = form.pdfRelatorio.replace(/^data:application\/pdf;base64,/, '');
                 jsonDados.pdfRelatorio = pdfRelatorioBase64;
+                console.log('[SW] PDF Relatório anexado, tamanho:', pdfRelatorioBase64.length);
             }
 
+            // CORREÇÃO: Envia o objeto diretamente
             const payload = {
-                json_dados: JSON.stringify(jsonDados), // Stringify para manter formato
+                json_dados: jsonDados, // OBJETO DIRETO, sem stringify
                 chave: form.chaveUnica || ''
             };
 
-            console.log('[SW] Enviando PDFs:', {
-                ficha: form.pdfFicha ? form.pdfFicha.length : 0,
-                relatorio: form.pdfRelatorio ? form.pdfRelatorio.length : 0
-            });
+            console.log('[SW] 📤 Enviando payload completo:', payload);
 
             // Envia ao servidor
             const response = await fetch('https://vps.pesoexato.com/servico_set', {
@@ -266,7 +266,8 @@ async function sincronizarFormulariosEmBackground() {
                 await db.put('formularios', form);
                 console.log(`✅ Formulário ${form.id} sincronizado em background`);
             } else {
-                console.warn(`⚠️ Falha ao sincronizar formulário ${form.id}: ${response.status}`);
+                const errorText = await response.text();
+                console.warn(`⚠️ Falha ao sincronizar formulário ${form.id}: ${response.status} - ${errorText}`);
             }
         }
     } catch (error) {
