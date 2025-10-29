@@ -1236,7 +1236,6 @@ async function limparRegistrosAntigos(db) {
 
 		// ======== GERADOR DE PDF (FORMATAÇÃO ORIGINAL DO GERADOR PDF.html) ========
 
-// Garante que o jsPDF foi carregado antes de gerar
 async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas) {
     if (!window.jspdf || !window.jspdf.jsPDF) {
         console.warn("jsPDF ainda não carregado, adiando geração...");
@@ -1245,11 +1244,16 @@ async function gerarPDFsAutomaticamente(formData, materiais, fotos, assinaturas)
     }
 
     try {
-        // Gera os dois PDFs e preenche state.pdfFicha / state.pdfRelatorio
+        console.log("🔄 Iniciando geração de PDFs...");
+        
         await gerarFichaPDF(formData, materiais, fotos, assinaturas);
         await gerarRelatorioPDF(formData, materiais, fotos, assinaturas);
 
-        // ✅ Agora salva o formulário com os PDFs já incluídos
+        console.log("✅ PDFs gerados:", {
+            ficha: state.pdfFicha ? state.pdfFicha.length : 0,
+            relatorio: state.pdfRelatorio ? state.pdfRelatorio.length : 0
+        });
+
         await salvarFormularioLocal(formData);
 
         showNotification("PDFs gerados e formulário salvo com sucesso!", "success");
@@ -1959,7 +1963,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=52')
+                navigator.serviceWorker.register('./sw.js?v=53')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -2223,17 +2227,11 @@ async function attemptSync(isManual = false) {
 // ======== SINCRONIZAÇÃO INDIVIDUAL DE FORMULÁRIO ========
 async function syncSingleForm(form) {
     try {
-        // Garante que o endpoint esteja definido
-        const endpoint = (typeof SYNC_CONFIG !== 'undefined' && SYNC_CONFIG.endpoint) ? SYNC_CONFIG.endpoint : 'https://vps.pesoexato.com/servico_set';
+        const endpoint = SYNC_CONFIG.endpoint;
 
-        // evita enviar campos grandes (fotos/assinaturas) — apenas flags
-        const hasFotos = Array.isArray(form.fotos) && form.fotos.length > 0;
-        const hasAssinaturas = !!(form.assinaturas && (form.assinaturas.cliente || form.assinaturas.tecnico));
-
-        // pega dados essenciais (defensivamente)
+        // Monta o objeto com os campos específicos que você quer
         const dados = form.formData || {};
-
-        // Monta o objeto com SOMENTE os campos que você listou
+        
         const jsonDados = {
             id: form.id,
             createdAt: form.createdAt || new Date().toISOString(),
@@ -2242,7 +2240,7 @@ async function syncSingleForm(form) {
             servico: dados.servico || '',
             cidade: dados.cidade || '',
             equipamento: dados.equipamento || '',
-            numeroSerie: dados.numeroSerie || dados.numeroSerie || dados.numeroSerie || '',
+            numeroSerie: dados.numeroSerie || '',
             dataInicial: dados.dataInicial || '',
             dataFinal: dados.dataFinal || '',
             horaInicial: dados.horaInicial || '',
@@ -2250,26 +2248,33 @@ async function syncSingleForm(form) {
             veiculo: dados.veiculo || '',
             estoque: dados.estoque || '',
             relatorioMaquina: dados.relatorioMaquina || '',
-            materiais: Array.isArray(form.materiais) ? form.materiais : (dados.materiais || []),
-            // flags (sem conteúdo binário)
-            hasFotos: !!hasFotos,
-            hasAssinaturas: !!hasAssinaturas,
+            materiais: Array.isArray(form.materiais) ? form.materiais : [],
             chaveUnica: form.chaveUnica || ''
         };
 
-        // Se você quer enviar os PDFs, adiciona-os explicitamente.
-        // OBS: aqui estou assumindo que form.pdfFicha / form.pdfRelatorio são base64 data URLs ou base64 strings.
+        // ADICIONA OS PDFs SE EXISTIREM
         if (form.pdfFicha) {
-            jsonDados.pdfFicha = form.pdfFicha; // ex: 'data:application/pdf;base64,...' ou base64 puro
+            // Remove o prefixo data URL se existir, mantém apenas o base64
+            const pdfFichaBase64 = form.pdfFicha.replace(/^data:application\/pdf;base64,/, '');
+            jsonDados.pdfFicha = pdfFichaBase64;
         }
+        
         if (form.pdfRelatorio) {
-            jsonDados.pdfRelatorio = form.pdfRelatorio;
+            const pdfRelatorioBase64 = form.pdfRelatorio.replace(/^data:application\/pdf;base64,/, '');
+            jsonDados.pdfRelatorio = pdfRelatorioBase64;
         }
 
         const payload = {
-            json_dados: jsonDados,
+            json_dados: JSON.stringify(jsonDados), // Stringify aqui para manter compatibilidade
             chave: form.chaveUnica || ''
         };
+
+        console.log('Enviando para servidor:', {
+            temPDFFicha: !!form.pdfFicha,
+            temPDFRelatorio: !!form.pdfRelatorio,
+            tamanhoFicha: form.pdfFicha ? form.pdfFicha.length : 0,
+            tamanhoRelatorio: form.pdfRelatorio ? form.pdfRelatorio.length : 0
+        });
 
         const response = await fetch(endpoint, {
             method: 'POST',
@@ -2280,7 +2285,6 @@ async function syncSingleForm(form) {
         });
 
         if (!response.ok) {
-            // tenta ler body de erro para debug
             let texto = '';
             try { texto = await response.text(); } catch(e) { texto = ''; }
             throw new Error(`HTTP ${response.status}: ${response.statusText} ${texto}`);
