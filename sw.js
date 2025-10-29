@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v54';
+const CACHE_NAME = 'formulario-cache-v56';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -232,17 +232,23 @@ async function sincronizarFormulariosEmBackground() {
                 chaveUnica: form.chaveUnica || ''
             };
 
-            // ADICIONA OS PDFs (apenas base64, sem o prefixo data URL)
+// No sw2.js, atualize a parte dos PDFs:
+
+            // ADICIONA OS PDFs (base64 puro, sem data URL)
             if (form.pdfFicha) {
-                const pdfFichaBase64 = form.pdfFicha.replace(/^data:application\/pdf;base64,/, '');
-                jsonDados.pdfFicha = pdfFichaBase64;
-                console.log('[SW] PDF Ficha anexado, tamanho:', pdfFichaBase64.length);
+                const pdfFichaBase64 = form.pdfFicha.split(',')[1]; // Apenas o base64
+                if (pdfFichaBase64) {
+                    jsonDados.pdfFicha = pdfFichaBase64;
+                    console.log('[SW] PDF Ficha anexado (base64 puro), tamanho:', pdfFichaBase64.length);
+                }
             }
             
             if (form.pdfRelatorio) {
-                const pdfRelatorioBase64 = form.pdfRelatorio.replace(/^data:application\/pdf;base64,/, '');
-                jsonDados.pdfRelatorio = pdfRelatorioBase64;
-                console.log('[SW] PDF Relatório anexado, tamanho:', pdfRelatorioBase64.length);
+                const pdfRelatorioBase64 = form.pdfRelatorio.split(',')[1]; // Apenas o base64
+                if (pdfRelatorioBase64) {
+                    jsonDados.pdfRelatorio = pdfRelatorioBase64;
+                    console.log('[SW] PDF Relatório anexado (base64 puro), tamanho:', pdfRelatorioBase64.length);
+                }
             }
 
             // CORREÇÃO: Envia o objeto diretamente
