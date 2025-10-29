@@ -2012,7 +2012,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=56')
+                navigator.serviceWorker.register('./sw.js?v=57')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -2353,12 +2353,22 @@ async function syncSingleForm(form) {
 		    let errorBody = '';
 		    try { 
 		        errorBody = await response.text(); 
-		        console.error('❌ Corpo do erro:', errorBody);
+		        console.error('âŒ Corpo do erro:', errorBody);
 		    } catch(e) { 
-		        errorBody = 'Não foi possível ler o corpo do erro';
+		        errorBody = 'NÃ£o foi possÃ­vel ler o corpo do erro';
 		    }
 		    throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorBody}`);
 		}
+		
+		const result = await response.json();
+		console.log('âœ… Sincronizado com sucesso:', result);
+		return true;
+		
+	} catch (error) {
+		console.error('Erro ao sincronizar formulÃ¡rio:', error);
+		return false;
+	}
+}
 
 // ======== FUNÇÕES AUXILIARES DO INDEXEDDB ========
 async function getPendingForms() {
