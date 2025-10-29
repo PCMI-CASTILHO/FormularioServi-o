@@ -1,6 +1,6 @@
 importScripts('https://cdn.jsdelivr.net/npm/idb@8/build/umd.js');
 // Nome do cache — altere sempre que atualizar
-const CACHE_NAME = 'formulario-cache-v52';
+const CACHE_NAME = 'formulario-cache-v53';
 
 // Arquivos para cache inicial - URLs ABSOLUTAS
 const ASSETS_TO_CACHE = [
@@ -202,7 +202,6 @@ self.addEventListener('sync', (event) => {
 
 async function sincronizarFormulariosEmBackground() {
     try {
-        // Abre o banco
         const db = await idb.openDB('FormulariosDB', 4);
         const todosForms = await db.getAll('formularios');
         const pendentes = todosForms.filter(f => !f.sincronizado);
@@ -212,44 +211,47 @@ async function sincronizarFormulariosEmBackground() {
         for (const form of pendentes) {
             const dados = form.formData || {};
 
-            // Monta o payload limpo (sem fotos/assinaturas)
+            // Monta o payload com os campos específicos
+            const jsonDados = {
+                id: form.id,
+                createdAt: form.createdAt || new Date().toISOString(),
+                cliente: dados.cliente || '',
+                tecnico: dados.tecnico || '',
+                servico: dados.servico || '',
+                cidade: dados.cidade || '',
+                equipamento: dados.equipamento || '',
+                numeroSerie: dados.numeroSerie || '',
+                dataInicial: dados.dataInicial || '',
+                dataFinal: dados.dataFinal || '',
+                horaInicial: dados.horaInicial || '',
+                horaFinal: dados.horaFinal || '',
+                veiculo: dados.veiculo || '',
+                estoque: dados.estoque || '',
+                relatorioMaquina: dados.relatorioMaquina || '',
+                materiais: Array.isArray(form.materiais) ? form.materiais : [],
+                chaveUnica: form.chaveUnica || ''
+            };
+
+            // ADICIONA OS PDFs (apenas base64, sem o prefixo data URL)
+            if (form.pdfFicha) {
+                const pdfFichaBase64 = form.pdfFicha.replace(/^data:application\/pdf;base64,/, '');
+                jsonDados.pdfFicha = pdfFichaBase64;
+            }
+            
+            if (form.pdfRelatorio) {
+                const pdfRelatorioBase64 = form.pdfRelatorio.replace(/^data:application\/pdf;base64,/, '');
+                jsonDados.pdfRelatorio = pdfRelatorioBase64;
+            }
+
             const payload = {
-                json_dados: {
-                    id: form.id,
-                    createdAt: form.createdAt || new Date().toISOString(),
-                    cliente: dados.cliente || '',
-                    tecnico: dados.tecnico || '',
-                    servico: dados.servico || '',
-                    cidade: dados.cidade || '',
-                    equipamento: dados.equipamento || '',
-                    numeroSerie: dados.numeroSerie || '',
-                    dataInicial: dados.dataInicial || '',
-                    dataFinal: dados.dataFinal || '',
-                    horaInicial: dados.horaInicial || '',
-                    horaFinal: dados.horaFinal || '',
-                    veiculo: dados.veiculo || '',
-                    estoque: dados.estoque || '',
-                    relatorioMaquina: dados.relatorioMaquina || '',
-                    materiais: Array.isArray(form.materiais) ? form.materiais : [],
-                    hasFotos: Array.isArray(form.fotos) && form.fotos.length > 0,
-                    hasAssinaturas: !!(form.assinaturas && (form.assinaturas.cliente || form.assinaturas.tecnico)),
-                    chaveUnica: form.chaveUnica || ''
-                },
-                chave: form.chaveUnica
+                json_dados: JSON.stringify(jsonDados), // Stringify para manter formato
+                chave: form.chaveUnica || ''
             };
 
             console.log('[SW] Enviando PDFs:', {
-              ficha: form.pdfFicha ? form.pdfFicha.length : 0,
-              relatorio: form.pdfRelatorio ? form.pdfRelatorio.length : 0
+                ficha: form.pdfFicha ? form.pdfFicha.length : 0,
+                relatorio: form.pdfRelatorio ? form.pdfRelatorio.length : 0
             });
-
-            // Anexa PDFs (se existirem)
-            if (form.pdfFicha) {
-                payload.json_dados.pdfFicha = form.pdfFicha;
-            }
-            if (form.pdfRelatorio) {
-                payload.json_dados.pdfRelatorio = form.pdfRelatorio;
-            }
 
             // Envia ao servidor
             const response = await fetch('https://vps.pesoexato.com/servico_set', {
