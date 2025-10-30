@@ -1480,8 +1480,9 @@ async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
     const pdfBlob = dataURItoBlob(pdfOutput);
     const compressedPdf = await compressPDF(pdfBlob);
     
-    state.pdfFicha = await blobToBase64(compressedPdf);
-    console.log('📄 PDF Ficha comprimido, tamanho:', state.pdfFicha.length);
+    doc.save(`Ficha_Manutencao_${formData.cliente || 'ficha'}.pdf`);
+    state.pdfFicha = doc.output('datauristring');
+    console.log('📄 PDF Ficha gerado, tamanho:', state.pdfFicha.length);
 }
 
 // ======== RELATÓRIO DE PRESTAÇÃO DE SERVIÇO ========
@@ -1722,8 +1723,10 @@ async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
     const pdfBlob = dataURItoBlob(pdfOutput);
     const compressedPdf = await compressPDF(pdfBlob);
     
-    state.pdfRelatorio = await blobToBase64(compressedPdf);
-    console.log('📄 PDF Relatório comprimido, tamanho:', state.pdfRelatorio.length);
+    const nome = (formData.cliente || 'relatorio').replace(/[^a-zA-Z0-9]/g, "_");
+    doc.save(`Relatorio_${nome}_${new Date().toISOString().split("T")[0]}.pdf`);
+    state.pdfRelatorio = doc.output('datauristring');
+    console.log('📄 PDF Relatório gerado, tamanho:', state.pdfRelatorio.length);
 }
 
 // Salva o formulário no IndexedDB
@@ -2011,7 +2014,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=61')
+                navigator.serviceWorker.register('./sw.js?v=62')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -2302,23 +2305,22 @@ async function syncSingleForm(form) {
 
         // ADICIONA OS PDFs SE EXISTIREM
 		if (form.pdfFicha) {
-		    // Remove COMPLETAMENTE o prefixo data URL
-		    const pdfFichaBase64 = form.pdfFicha.split(',')[1]; // Pega apenas a parte após a vírgula
-		    if (pdfFichaBase64) {
+		    const pdfFichaBase64 = form.pdfFicha.split(',')[1]; // Pega apenas o base64 após a vírgula
+		    if (pdfFichaBase64 && pdfFichaBase64.length > 100) { // Verifica se tem dados
 		        jsonDados.pdfFicha = pdfFichaBase64;
-		        console.log('📄 PDF Ficha preparado (base64 puro), tamanho:', pdfFichaBase64.length);
+		        console.log('📄 PDF Ficha preparado, tamanho base64:', pdfFichaBase64.length);
 		    } else {
-		        console.warn('❌ PDF Ficha não contém dados base64 válidos');
+		        console.warn('⚠️ PDF Ficha muito pequeno ou inválido');
 		    }
 		}
 		
 		if (form.pdfRelatorio) {
-		    const pdfRelatorioBase64 = form.pdfRelatorio.split(',')[1]; // Pega apenas a parte após a vírgula
-		    if (pdfRelatorioBase64) {
+		    const pdfRelatorioBase64 = form.pdfRelatorio.split(',')[1];
+		    if (pdfRelatorioBase64 && pdfRelatorioBase64.length > 100) {
 		        jsonDados.pdfRelatorio = pdfRelatorioBase64;
-		        console.log('📄 PDF Relatório preparado (base64 puro), tamanho:', pdfRelatorioBase64.length);
+		        console.log('📄 PDF Relatório preparado, tamanho base64:', pdfRelatorioBase64.length);
 		    } else {
-		        console.warn('❌ PDF Relatório não contém dados base64 válidos');
+		        console.warn('⚠️ PDF Relatório muito pequeno ou inválido');
 		    }
 		}
 
