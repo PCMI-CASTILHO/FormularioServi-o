@@ -633,34 +633,6 @@ const SYNC_CONFIG = {
     maxRetention: 14 * 24 * 60 * 60 * 1000 // 24 horas em milissegundos
 };
 
-		// Funções auxiliares para compressão de PDF
-function dataURItoBlob(dataURI) {
-    const byteString = atob(dataURI.split(',')[1]);
-    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i);
-    }
-    return new Blob([ab], { type: mimeString });
-}
-
-async function compressPDF(blob, quality = 0.6) {
-    return new Promise((resolve) => {
-        // Para PDF, não podemos comprimir como imagem, então retornamos o original
-        // Mas podemos tentar reduzir o tamanho de outras formas
-        resolve(blob);
-    });
-}
-
-function blobToBase64(blob) {
-    return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
-    });
-}
-
 		// ======== FUNÇÃO PARA GERAR CHAVE ÚNICA ========
 function generateUniqueKey() {
     const timestamp = Date.now().toString(36);
@@ -1130,8 +1102,6 @@ async function reduzirImagem(imgDataUrl, maxWidth = 600, quality = 0.5) {
       canvas.height = img.height * scale;
       const ctx = canvas.getContext('2d');
       
-      // Configurações para melhor compressão
-      ctx.imageSmoothingQuality = 'low';
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       
       resolve(canvas.toDataURL('image/jpeg', quality));
@@ -1308,14 +1278,6 @@ function formatDate(dateString) {
 async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF("p", "mm", "a4");
-
-    doc.setProperties({
-        title: `Ficha Manutenção - ${formData.cliente || 'Cliente'}`,
-        subject: 'Ficha de Manutenção',
-        creator: 'Sistema Selaves',
-        compression: true
-    });
-	
     const logo = await carregarImagem("Logo.png");
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -1477,27 +1439,17 @@ async function gerarFichaPDF(formData, materiais, fotos, assinaturas) {
     const pdfOutput = doc.output('datauristring');
     
     // Converte para blob e comprime
-    const pdfBlob = dataURItoBlob(pdfOutput);
-    const compressedPdf = await compressPDF(pdfBlob);
-    
-    doc.save(`Ficha_Manutencao_${formData.cliente || 'ficha'}.pdf`);
-    state.pdfFicha = doc.output('datauristring');
-    console.log('📄 PDF Ficha gerado, tamanho:', state.pdfFicha.length);
+
+    const nome = (formData.cliente || 'relatorio').replace(/[^a-zA-Z0-9]/g, "_");
+    doc.save(`Relatorio_${nome}_${new Date().toISOString().split("T")[0]}.pdf`);
+	state.pdfRelatorio = doc.output('datauristring');
 }
 
 // ======== RELATÓRIO DE PRESTAÇÃO DE SERVIÇO ========
 async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF("p", "mm", "a4");
-
-    doc.setProperties({
-        title: `Relatório Serviço - ${formData.cliente || 'Cliente'}`,
-        subject: 'Relatório de Prestação de Serviço',
-        creator: 'Sistema Selaves',
-        compression: true
-    });
-	
-    const logo = await carregarImagem("Logo.png");
+ 	const logo = await carregarImagem("Logo.png");
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     let y = 20;
@@ -1718,15 +1670,10 @@ async function gerarRelatorioPDF(formData, materiais, fotos, assinaturas) {
     doc.setFont('helvetica', 'normal');
     doc.text('TÉCNICO', spacing + signatureWidth / 2, y + 3, { align: 'center' });
     doc.text('CLIENTE', spacing * 2 + signatureWidth + signatureWidth / 2, y + 3, { align: 'center' });
-    
-    const pdfOutput = doc.output('datauristring');
-    const pdfBlob = dataURItoBlob(pdfOutput);
-    const compressedPdf = await compressPDF(pdfBlob);
-    
+
     const nome = (formData.cliente || 'relatorio').replace(/[^a-zA-Z0-9]/g, "_");
     doc.save(`Relatorio_${nome}_${new Date().toISOString().split("T")[0]}.pdf`);
-    state.pdfRelatorio = doc.output('datauristring');
-    console.log('📄 PDF Relatório gerado, tamanho:', state.pdfRelatorio.length);
+	state.pdfRelatorio = doc.output('datauristring');
 }
 
 // Salva o formulário no IndexedDB
@@ -2014,7 +1961,7 @@ async function startApp() {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=62')
+                navigator.serviceWorker.register('./sw.js?v=63')
                     .then(reg => {
                         console.log('Service Worker registrado com sucesso. Scope:', reg.scope);
                     })
@@ -2304,25 +2251,18 @@ async function syncSingleForm(form) {
         };
 
         // ADICIONA OS PDFs SE EXISTIREM
-		if (form.pdfFicha) {
-		    const pdfFichaBase64 = form.pdfFicha.split(',')[1]; // Pega apenas o base64 após a vírgula
-		    if (pdfFichaBase64 && pdfFichaBase64.length > 100) { // Verifica se tem dados
-		        jsonDados.pdfFicha = pdfFichaBase64;
-		        console.log('📄 PDF Ficha preparado, tamanho base64:', pdfFichaBase64.length);
-		    } else {
-		        console.warn('⚠️ PDF Ficha muito pequeno ou inválido');
-		    }
-		}
-		
-		if (form.pdfRelatorio) {
-		    const pdfRelatorioBase64 = form.pdfRelatorio.split(',')[1];
-		    if (pdfRelatorioBase64 && pdfRelatorioBase64.length > 100) {
-		        jsonDados.pdfRelatorio = pdfRelatorioBase64;
-		        console.log('📄 PDF Relatório preparado, tamanho base64:', pdfRelatorioBase64.length);
-		    } else {
-		        console.warn('⚠️ PDF Relatório muito pequeno ou inválido');
-		    }
-		}
+        if (form.pdfFicha) {
+            // Remove o prefixo data URL se existir, mantém apenas o base64
+            const pdfFichaBase64 = form.pdfFicha.replace(/^data:application\/pdf;base64,/, '');
+            jsonDados.pdfFicha = pdfFichaBase64;
+            console.log('📄 PDF Ficha preparado, tamanho:', pdfFichaBase64.length);
+        }
+        
+        if (form.pdfRelatorio) {
+            const pdfRelatorioBase64 = form.pdfRelatorio.replace(/^data:application\/pdf;base64,/, '');
+            jsonDados.pdfRelatorio = pdfRelatorioBase64;
+            console.log('📄 PDF Relatório preparado, tamanho:', pdfRelatorioBase64.length);
+        }
 
         // CORREÇÃO: Envia o objeto diretamente, sem stringify duplo
         const payload = {
@@ -2336,30 +2276,30 @@ async function syncSingleForm(form) {
             payload: payload
         });
 
-		const response = await fetch(endpoint, {
-		    method: 'POST',
-		    headers: {
-		        'Content-Type': 'application/json'
-		    },
-		    body: JSON.stringify(payload)
-		});
-		
-		console.log('📨 Resposta do servidor:', {
-		    status: response.status,
-		    ok: response.ok,
-		    headers: Object.fromEntries(response.headers)
-		});
-		
-		if (!response.ok) {
-		    let errorBody = '';
-		    try { 
-		        errorBody = await response.text(); 
-		        console.error('❌ Corpo do erro:', errorBody);
-		    } catch(e) { 
-		        errorBody = 'Não foi possível ler o corpo do erro';
-		    }
-		    throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorBody}`);
-		}
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            let texto = '';
+            try { texto = await response.text(); } catch(e) { texto = ''; }
+            console.error('❌ Erro na resposta:', response.status, texto);
+            throw new Error(`HTTP ${response.status}: ${response.statusText} ${texto}`);
+        }
+
+        const result = await response.json().catch(() => null);
+        console.log('✅ Formulário sincronizado:', form.id, result);
+
+        return true;
+    } catch (error) {
+        console.error('❌ Erro ao sincronizar formulário:', error);
+        return false;
+    }
+}
 
 // ======== FUNÇÕES AUXILIARES DO INDEXEDDB ========
 async function getPendingForms() {
